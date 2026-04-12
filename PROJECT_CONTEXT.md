@@ -1,5 +1,5 @@
 # BTC Intraday Trading System — Project Context
-## Last Updated: 2026-04-13 06:00 GMT+8
+## Last Updated: 2026-04-13 06:47 GMT+8
 
 ---
 
@@ -20,6 +20,10 @@ signal service. Our goal is to clone and improve the strategy logic.
 btc-intraday-system/
 ├── btc_intraday_system.py    # Main backtester (1200+ lines)
 ├── fetch_btc_data.py          # Data fetcher from Binance (multi-asset)
+├── live_signal_bot.py         # Live Telegram signal bot v2 (NEW)
+├── .env                       # Credentials (gitignored)
+├── .env.example               # Template for credentials
+├── .gitignore                 # Ignores .env, logs, __pycache__
 ├── data/features/
 │   ├── btcusdt_1m.csv         # ~455K candles (Jun 2025 - Apr 2026)
 │   ├── ethusdt_1m.csv         # ~455K candles
@@ -122,12 +126,22 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 
 ## CONFIG (CURRENT)
 
+### Backtester:
 - SYMBOLS: BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT
 - INITIAL_EQUITY: $10,000
 - COOLDOWN_BARS_5M: 3 (was 6)
 - Symbol-specific slippage: BTC 0.05%, ETH 0.08%, SOL 0.12%, XRP 0.15%
 - MAX_NOTIONAL_FRACTION: 10.0 (position sizing cap)
 - Volume filter: skip bottom 30% dead candles
+
+### Live Bot:
+- Bot: @ShrPawsPsudoBot
+- Rolling window: 10,080 1m candles (7 days)
+- Check interval: 60s
+- Default leverage: 5x
+- Position monitor: every 15s
+- Mode: PAPER (set PAPER_MODE=false for live)
+- Server IP: 8.219.194.199
 
 ---
 
@@ -188,51 +202,61 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - Minimum stop floor: 0.5% → 0.4%
 - Test: 337 trades, 77.7% WR, PF 2.32, +$49,987
 
+### v7 — Live Signal Bot v2 (2026-04-13)
+- Built `live_signal_bot.py` — Telegram signal bot with inline trade buttons
+- Binance WebSocket for live 1m candles (BTC/ETH/SOL/XRP)
+- Multi-timeframe resampling + exact same backtester logic
+- Telegram inline keyboard: execute trade with leverage picker (3x/5x/10x)
+- Position monitor: auto TP1/TP2/TP3/TP4 alerts, break-even, trailing stop
+- ccxt integration for live Binance Futures execution
+- Paper mode by default (set PAPER_MODE=false for live)
+- .env for credentials (gitignored), .env.example template
+- Bot Telegram: @ShrPawsPsudoBot
+
 ---
 
-## NEXT SESSION — TELEGRAM SIGNAL BOT
+## LIVE SIGNAL BOT — SETUP STATUS
 
-### Goal
-Deploy a Python bot on a VM that sends trading signals to Telegram 24/7.
+### ✅ Done:
+- Telegram bot created: @ShrPawsPsudoBot
+- Bot token + chat ID configured in .env
+- Bot running in paper mode (signals + buttons working)
+- Server IP: 8.219.194.199
 
-### Architecture
-```
-Binance WebSocket (live 1m candles)
-  → resample to 5m/15m/30m/4H/6H/12H
-  → run the exact same backtester logic (btc_intraday_system.py)
-  → signal detected → Telegram message
-  → manual execution (or ccxt order execution later)
-```
+### ⏳ Remaining (to go live):
+1. Activate Binance Futures account:
+   - Complete KYC if not done
+   - Go to Derivatives → USDⓈ-M Futures → pass quiz + accept ToS
+2. Create Binance API key with these restrictions:
+   - Enable Reading ✅
+   - Enable Futures ✅
+   - **IP Restriction: add 8.219.194.199** (required for Futures API)
+   - Disable Spot Trading ❌
+   - Disable Withdrawals ❌
+   - Disable Universal Transfer ❌
+3. Add keys to .env:
+   ```
+   BINANCE_API_KEY=<paste key>
+   BINANCE_API_SECRET=<paste secret>
+   PAPER_MODE=false
+   ```
+4. Restart bot: `pkill -f live_signal_bot && cd btc-intraday-system && nohup python3 -u live_signal_bot.py >> live_bot.log 2>&1 &`
+5. Fund Binance Futures wallet with USDT
 
-### Why Python (not Firebase/TypeScript)
-- Entire system already in Python — zero rewrite
-- $5/mo VPS is enough (1 CPU, 512MB RAM, no GPU/ML needed)
-- Firebase is overkill for personal signals
+### Bot Features (v2):
+- Signal fires → Telegram message with entry/stop/TPs/confidence
+- Inline buttons: ⚡ GO LONG/SHORT, leverage picker (3x/5x/10x), ❌ Pass
+- Position monitor checks every 15s for TP/SL hits
+- Auto alerts: TP1, TP2, TP3, TP4, break-even, trailing stop, stop loss
+- Close buttons on active positions: Close 50% / Close All
+- Cooldown: 3 × 5m bars (15 min) between signals per symbol
 
-### Steps (DO THIS NEXT SESSION)
-1. User creates Telegram bot via @BotFather → gets bot token
-2. User messages the bot, gets chat ID via getUpdates API
-3. We build `live_signal_bot.py`:
-   - ccxt for Binance WebSocket live data
-   - Resample 1m candles into multi-timeframe
-   - Run build_master_dataset logic on rolling window
-   - Check for new setups every 5 minutes
-   - Send Telegram message on signal (entry, TPs, SL, confidence)
-4. Deploy to VM as systemd service
-5. Paper trade for 2-4 weeks before risking real money
-
-### Telegram Bot Setup (remind user)
-1. Search @BotFather in Telegram
-2. Send `/newbot`, pick name and username (must end in `bot`)
-3. Save the bot token (looks like `7123456789:AAH...`)
-4. Start chat with new bot, send "hi"
-5. Open `https://api.telegram.org/botTOKEN/getUpdates` to get chat ID
-6. Give us both values to wire up the bot
-
-### Also TODO
-- Hour filter test (US/London sessions may perform better)
-- Consider adding more symbols (CHZUSDT or other trending alts)
-- ccxt order execution layer (after paper trading proves out)
+### Bot Config:
+- 7-day rolling window (10,080 1m candles) for indicator warmup
+- Signal check every 60 seconds
+- Default leverage: 5x
+- Risk per trade: 2.5-4% based on confidence tier
+- Paper equity: $10,000
 
 ---
 
@@ -267,7 +291,8 @@ Binance WebSocket (live 1m candles)
 ## NEXT SESSION STARTUP
 
 1. Read this file first
-2. Remind user: create Telegram bot via @BotFather (steps above)
-3. Get bot token + chat ID from user
-4. Build `live_signal_bot.py`
-5. Deploy to VM
+2. Check bot status: `ps aux | grep live_signal_bot`
+3. Check logs: `tail -50 btc-intraday-system/live_bot.log`
+4. If bot not running: `cd btc-intraday-system && nohup python3 -u live_signal_bot.py >> live_bot.log 2>&1 &`
+5. To go live: get Binance API keys (see LIVE SIGNAL BOT section above), update .env, set PAPER_MODE=false
+6. To deploy to VPS: copy project + .env, set up systemd service
