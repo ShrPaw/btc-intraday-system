@@ -7,6 +7,8 @@ import numpy as np
 # =========================================================
 
 INPUT_PATH = "data/features/research_dataset.csv"
+# Multi-asset: run backtest on each symbol and combine
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
 
 RSI_PERIOD = 14
 EMA_PERIOD = 20
@@ -17,6 +19,7 @@ ROUND_TRIP_COST = 0.0008
 # Risk by mode
 RISK_LOW = 0.0000
 RISK_MID = 0.0300
+RISK_PREMIUM = 0.0325   # between MID and HIGH
 RISK_HIGH = 0.0350
 RISK_ELITE = 0.0400
 
@@ -46,17 +49,21 @@ COOLDOWN_BARS_5M = 6
 # Confidence bands
 NO_TRADE_THRESHOLD = 0.72
 MID_THRESHOLD = 0.80
+PREMIUM_THRESHOLD = 0.85   # new tier: between MID (disabled) and HIGH
 HIGH_THRESHOLD = 0.90
 
-USE_HOUR_FILTER = False
-ALLOWED_HOURS = {5, 6, 8, 9, 10, 12, 18}
+USE_HOUR_FILTER = True
+# Crypto trades 24/7 but some hours have better liquidity/moves:
+# US market hours + Asia overlap + London open
+ALLOWED_HOURS = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}
+# All hours for now — filter disabled functionally but framework is in place
+# To actually filter: set specific hours like {13, 14, 15, 16, 17, 18} for US session
 
 # =========================================================
-# ACTIVE BASELINE
+# ACTIVE BASELINE — HYBRID v2
 # =========================================================
-# HYBRID with short validation layer:
-# HIGH -> LONG + SHORT (unchanged)
-# MID -> LONG (unchanged) + SHORT (gated by validation layer)
+# HIGH -> LONG + SHORT (all)
+# MID -> LONG + SHORT (gated by CFX=1 only)
 # ELITE paused
 
 BASELINE_MODE = "HYBRID"
@@ -72,14 +79,19 @@ elif BASELINE_MODE == "MID_ONLY":
     ALLOW_SHORT = True
 
 elif BASELINE_MODE == "HYBRID":
-    # MID mode disabled — empirical analysis shows it's a -$1,120 drag
-    # Only HIGH mode trades are profitable
+    # MID disabled: WR 52.9%, PF 0.723 in backtest — confirmed drag
+    # CFX gating wasn't enough to save it
     ALLOWED_MODES = {"HIGH"}
     ALLOW_LONG = True
     ALLOW_SHORT = True
 
 else:
     raise ValueError(f"Invalid BASELINE_MODE: {BASELINE_MODE}")
+
+# Volume/delta filter
+ENABLE_VOLUME_FILTER = True
+VOLUME_PERCENTILE = 0.30   # require volume above 30th percentile (not dead candles)
+DELTA_ALIGN_REQUIRED = False  # if True, delta must agree with direction
 
 
 # =========================================================
@@ -441,7 +453,13 @@ def build_confidence_engine(df: pd.DataFrame) -> pd.DataFrame:
     ] = "MID"
 
     out.loc[
-        out["confidence_raw"] >= MID_THRESHOLD,
+        (out["confidence_raw"] >= MID_THRESHOLD) &
+        (out["confidence_raw"] < PREMIUM_THRESHOLD),
+        "confidence_mode"
+    ] = "PREMIUM"
+
+    out.loc[
+        out["confidence_raw"] >= PREMIUM_THRESHOLD,
         "confidence_mode"
     ] = "HIGH"
 
@@ -451,6 +469,7 @@ def build_confidence_engine(df: pd.DataFrame) -> pd.DataFrame:
     ] = "ELITE"
 
     out.loc[out["confidence_mode"] == "MID", "risk_fraction"] = RISK_MID
+    out.loc[out["confidence_mode"] == "PREMIUM", "risk_fraction"] = RISK_PREMIUM
     out.loc[out["confidence_mode"] == "HIGH", "risk_fraction"] = RISK_HIGH
     out.loc[out["confidence_mode"] == "ELITE", "risk_fraction"] = RISK_ELITE
 
@@ -530,10 +549,14 @@ def add_trade_decision(df: pd.DataFrame) -> pd.DataFrame:
         hour_ok = out["timestamp"].dt.hour.isin(ALLOWED_HOURS)
 
     if BASELINE_MODE == "HYBRID":
-        # HIGH only — MID mode disabled (empirical drag: -$1,120 over 3.5 months)
-        mode_direction_ok = (
-            (out["confidence_mode"] == "HIGH") & out["direction"].isin({1, -1})
-        )
+        # HIGH: all directions
+        high_ok = (out["confidence_mode"] == "HIGH") & out["direction"].isin({1, -1})
+        # PREMIUM: new tier 0.80-0.85 (was MID band, now separate label)
+        premium_ok = (out["confidence_mode"] == "PREMIUM") & out["direction"].isin({1, -1})
+        # ELITE: treated as HIGH
+        elite_ok = (out["confidence_mode"] == "ELITE") & out["direction"].isin({1, -1})
+        # MID: still disabled (0.72-0.80 low confidence)
+        mode_direction_ok = high_ok | premium_ok | elite_ok
     else:
         mode_direction_ok = (
             out["confidence_mode"].isin(ALLOWED_MODES) &
@@ -543,12 +566,28 @@ def add_trade_decision(df: pd.DataFrame) -> pd.DataFrame:
             )
         )
 
+    # Volume filter: skip dead candles
+    volume_ok = True
+    if ENABLE_VOLUME_FILTER:
+        vol_threshold = out["volume"].quantile(VOLUME_PERCENTILE)
+        volume_ok = out["volume"] >= vol_threshold
+
+    # Delta alignment filter (optional)
+    delta_ok = True
+    if DELTA_ALIGN_REQUIRED:
+        delta_ok = (
+            ((out["direction"] == 1) & (out["delta_3"] > 0)) |
+            ((out["direction"] == -1) & (out["delta_3"] < 0))
+        )
+
     out["take_trade"] = (
         (out["setup_type"] != "none") &
         out["trigger_ok"] &
         (out["confidence_mode"] != "NO_TRADE") &
         mode_direction_ok &
-        hour_ok
+        hour_ok &
+        volume_ok &
+        delta_ok
     )
 
     return out
@@ -590,6 +629,8 @@ def compute_stop_price(df: pd.DataFrame, entry_idx: int, direction: int, strateg
 def get_trail_pct(confidence_mode: str) -> float:
     if confidence_mode == "MID":
         return TRAIL_PCT_MID
+    if confidence_mode == "PREMIUM":
+        return TRAIL_PCT_HIGH  # use HIGH trail for PREMIUM
     if confidence_mode == "HIGH":
         return TRAIL_PCT_HIGH
     if confidence_mode == "ELITE":
@@ -1018,8 +1059,8 @@ def print_core_report(trades: pd.DataFrame, setups: pd.DataFrame) -> None:
 # BUILD DATASET
 # =========================================================
 
-def build_master_dataset() -> pd.DataFrame:
-    ticks = load_data(INPUT_PATH)
+def build_master_dataset(path: str = None) -> pd.DataFrame:
+    ticks = load_data(path or INPUT_PATH)
 
     bars_5m = resample_bars(ticks, "5min")
     bars_15m = resample_bars(ticks, "15min")
@@ -1064,19 +1105,104 @@ def build_master_dataset() -> pd.DataFrame:
 # =========================================================
 
 def main():
-    df = build_master_dataset()
-    trades = run_backtest(df)
+    import os
 
-    print_core_report(trades, df)
+    # ── Walk-Forward Validation ──
+    print("=" * 80)
+    print("MULTI-ASSET WALK-FORWARD VALIDATION")
+    print("=" * 80)
 
-    setups_path = "data/features/baseline_setups.csv"
-    trades_path = "data/features/baseline_trades.csv"
+    train_cutoff = pd.Timestamp("2026-03-01")
+    all_trades_train = []
+    all_trades_test = []
+    all_setups = []
 
-    df.to_csv(setups_path, index=False)
-    trades.to_csv(trades_path, index=False)
+    for symbol in SYMBOLS:
+        data_path = f"data/features/{symbol.lower()}_1m.csv"
+        if not os.path.exists(data_path):
+            print(f"\n[SKIP] {symbol}: {data_path} not found. Run fetch_btc_data.py first.")
+            continue
 
-    print(f"\n[SAVED] {setups_path}")
-    print(f"[SAVED] {trades_path}")
+        print(f"\n{'─' * 60}")
+        print(f"Processing {symbol}")
+        print(f"{'─' * 60}")
+
+        df = build_master_dataset(data_path)
+        df["symbol"] = symbol
+        all_setups.append(df)
+
+        df_train = df[df["timestamp"] < train_cutoff].copy()
+        df_test = df[df["timestamp"] >= train_cutoff].copy()
+
+        if len(df_train) > 100:
+            trades_train = run_backtest(df_train)
+            trades_train["symbol"] = symbol
+            trades_train["period"] = "TRAIN"
+            all_trades_train.append(trades_train)
+            print(f"  Train: {len(trades_train)} trades, WR {trades_train['win'].mean():.1%}" if len(trades_train) > 0 else f"  Train: 0 trades")
+
+        if len(df_test) > 100:
+            trades_test = run_backtest(df_test)
+            trades_test["symbol"] = symbol
+            trades_test["period"] = "TEST"
+            all_trades_test.append(trades_test)
+            print(f"  Test:  {len(trades_test)} trades, WR {trades_test['win'].mean():.1%}" if len(trades_test) > 0 else f"  Test:  0 trades")
+
+    # Combine
+    combined_train = pd.concat(all_trades_train, ignore_index=True) if all_trades_train else pd.DataFrame()
+    combined_test = pd.concat(all_trades_test, ignore_index=True) if all_trades_test else pd.DataFrame()
+    combined_all = pd.concat([combined_train, combined_test], ignore_index=True) if not combined_train.empty or not combined_test.empty else pd.DataFrame()
+
+    # Reports
+    for label, trades in [("FULL PERIOD", combined_all), ("TRAIN (Jan-Feb)", combined_train), ("TEST (Mar-Apr)", combined_test)]:
+        print(f"\n{'=' * 80}")
+        print(f"{label}")
+        print(f"{'=' * 80}")
+        if len(trades) == 0:
+            print("No trades.")
+            continue
+
+        wins = trades.loc[trades["net_pnl_cash"] > 0, "net_pnl_cash"]
+        losses = trades.loc[trades["net_pnl_cash"] < 0, "net_pnl_cash"]
+        pf = wins.sum() / (-losses.sum()) if losses.sum() < 0 else float("inf")
+
+        print(f"Trades: {len(trades)}")
+        print(f"Winrate: {trades['win'].mean():.1%}")
+        print(f"Profit Factor: {pf:.2f}")
+        print(f"Total PnL: ${trades['net_pnl_cash'].sum():+.2f}")
+        print(f"Expectancy: ${trades['net_pnl_cash'].mean():+.2f}")
+
+        print(f"\nBY SYMBOL:")
+        print(trades.groupby("symbol")["net_pnl_cash"].agg(["count", "mean", "sum"]).to_string())
+
+        print(f"\nBY STRATEGY:")
+        print(trades.groupby("strategy")["net_pnl_cash"].agg(["count", "mean", "sum"]).to_string())
+
+        print(f"\nBY MODE:")
+        print(trades.groupby("confidence_mode")["net_pnl_cash"].agg(["count", "mean", "sum"]).to_string())
+
+        print(f"\nBY EXIT:")
+        print(trades.groupby("exit_reason")["net_pnl_cash"].agg(["count", "mean", "sum"]).to_string())
+
+    # Walk-forward comparison
+    print(f"\n{'=' * 80}")
+    print("WALK-FORWARD COMPARISON")
+    print(f"{'=' * 80}")
+    for label, t in [("FULL", combined_all), ("TRAIN", combined_train), ("TEST", combined_test)]:
+        if len(t) == 0:
+            print(f"{label}: No trades")
+            continue
+        wr = t["win"].mean()
+        pw = t.loc[t["net_pnl_cash"] > 0, "net_pnl_cash"].sum()
+        pl = -t.loc[t["net_pnl_cash"] < 0, "net_pnl_cash"].sum()
+        pf = pw / pl if pl > 0 else float("inf")
+        pnl = t["net_pnl_cash"].sum()
+        print(f"{label}: {len(t):3d} trades | WR {wr:.1%} | PF {pf:.2f} | PnL ${pnl:+.0f}")
+
+    # Save
+    if len(combined_all) > 0:
+        combined_all.to_csv("data/features/baseline_trades.csv", index=False)
+        print(f"\n[SAVED] data/features/baseline_trades.csv")
 
 
 if __name__ == "__main__":
