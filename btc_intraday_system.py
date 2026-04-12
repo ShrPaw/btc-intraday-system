@@ -387,6 +387,12 @@ def build_confidence_engine(df: pd.DataFrame) -> pd.DataFrame:
 
     rv_score = rolling_minmax_score(out["rv_6"].fillna(0), 200).fillna(0.5)
 
+    # CFX: 30M RSI alignment (confirmed from live signals: CFX 30M)
+    cfx_long = (out["m30_rsi"] > 50).astype(float)
+    cfx_short = (out["m30_rsi"] < 50).astype(float)
+    cfx_align = np.where(out["direction"] == 1, cfx_long, cfx_short)
+    out["cfx_score"] = cfx_align  # binary: 1 if 30M confirms, 0 if not
+
     out["confidence_raw"] = 0.0
 
     scalp_mask = out["setup_type"] == "RSI_SCALP"
@@ -406,10 +412,11 @@ def build_confidence_engine(df: pd.DataFrame) -> pd.DataFrame:
     trend_structure = np.where(out["direction"] == 1, structure_long, structure_short)
 
     trend_conf = (
-        0.30 * trend_alignment +
+        0.25 * trend_alignment +
         0.20 * momentum_score +
-        0.35 * trend_structure +
-        0.15 * rv_score
+        0.30 * trend_structure +
+        0.15 * rv_score +
+        0.10 * cfx_align
     )
 
     out.loc[scalp_mask, "confidence_raw"] = scalp_conf[scalp_mask]
@@ -604,6 +611,7 @@ def simulate_trade(
     risk_fraction: float,
     equity_before: float,
     stage: int = 0,
+    cfx_score: float = 0.0,
 ) -> dict:
     entry_row = df.iloc[entry_idx]
     entry_price = float(entry_row["close"])
@@ -798,6 +806,7 @@ def simulate_trade(
         "dir_label": direction_label(direction),
         "strategy": strategy,
         "stage": stage,
+        "cfx_score": cfx_score,
         "confidence_raw": confidence,
         "confidence_mode": confidence_mode,
         "risk_fraction": risk_fraction,
@@ -843,6 +852,7 @@ def run_backtest(df: pd.DataFrame) -> pd.DataFrame:
             risk_fraction=float(row["risk_fraction"]),
             equity_before=float(equity),
             stage=int(row.get("stage", 0)),
+            cfx_score=float(row.get("cfx_score", 0)),
         )
         trades.append(trade)
         equity = float(trade["equity_after"])
@@ -950,6 +960,16 @@ def print_core_report(trades: pd.DataFrame, setups: pd.DataFrame) -> None:
             .to_string()
         )
 
+    # CFX breakdown (RSI_TREND only)
+    trend_trades = trades[trades["strategy"] == "RSI_TREND"]
+    if len(trend_trades) > 0 and "cfx_score" in trend_trades.columns:
+        print("\nBY CFX (RSI_TREND only)")
+        print(
+            trend_trades.groupby("cfx_score", observed=True)["net_pnl_cash"]
+            .agg(["count", "mean", "median", "sum"])
+            .to_string()
+        )
+
     print("\nBY EXIT REASON")
     print(
         trades.groupby("exit_reason", observed=True)["net_pnl_cash"]
@@ -1003,6 +1023,7 @@ def build_master_dataset() -> pd.DataFrame:
 
     bars_5m = resample_bars(ticks, "5min")
     bars_15m = resample_bars(ticks, "15min")
+    bars_30m = resample_bars(ticks, "30min")
     bars_4h = resample_bars(ticks, "4h")
     bars_6h = resample_bars(ticks, "6h")
     bars_12h = resample_bars(ticks, "12h")
@@ -1012,6 +1033,7 @@ def build_master_dataset() -> pd.DataFrame:
     bars_5m = add_extra_features_5m(bars_5m)
 
     bars_15m = add_rsi_features(bars_15m, RSI_PERIOD)
+    bars_30m = add_rsi_features(bars_30m, RSI_PERIOD)
     bars_4h = add_rsi_features(bars_4h, RSI_PERIOD)
     bars_6h = add_rsi_features(bars_6h, RSI_PERIOD)
     bars_12h = add_rsi_features(bars_12h, RSI_PERIOD)
@@ -1019,6 +1041,7 @@ def build_master_dataset() -> pd.DataFrame:
     df = bars_5m.copy()
 
     df = merge_asof_feature(df, bars_15m, "m15", ["rsi", "rsi_slope_1"])
+    df = merge_asof_feature(df, bars_30m, "m30", ["rsi"])
     df = merge_asof_feature(df, bars_4h, "h4", ["rsi", "rsi_slope_1", "rsi_slope_2", "fresh_long", "fresh_short", "bars_since_cross"])
     df = merge_asof_feature(df, bars_6h, "h6", ["rsi"])
     df = merge_asof_feature(df, bars_12h, "h12", ["rsi"])
