@@ -22,7 +22,8 @@ RISK_ELITE = 0.0400
 
 # TP structure
 TP1_PCT = 0.005
-TP2_PCT = 0.007
+TP2_PCT_SCALP = 0.007    # RSI_SCALP: +0.7%
+TP2_PCT_TREND = 0.006    # RSI_TREND: +0.6% (confirmed from live signals)
 TP3_PCT = 0.008
 TP4_PCT = 0.090
 
@@ -309,11 +310,19 @@ def build_setup_engine(df5: pd.DataFrame) -> pd.DataFrame:
 
     df["setup_type"] = "none"
     df["direction"] = 0
+    df["stage"] = 0
 
     df.loc[scalp_long_context, ["setup_type", "direction"]] = ["RSI_SCALP", 1]
     df.loc[scalp_short_context, ["setup_type", "direction"]] = ["RSI_SCALP", -1]
     df.loc[trend_long_context, ["setup_type", "direction"]] = ["RSI_TREND", 1]
     df.loc[trend_short_context, ["setup_type", "direction"]] = ["RSI_TREND", -1]
+
+    # Stage: derived from h4_bars_since_cross (only meaningful for RSI_SCALP)
+    # Stage 1 = very fresh (0-1 bars), Stage 2 = still fresh (2-3 bars), Stage 3 = aging (4+)
+    bsc = df["h4_bars_since_cross"].fillna(99).astype(int)
+    df.loc[(df["setup_type"] == "RSI_SCALP") & (bsc <= 1), "stage"] = 1
+    df.loc[(df["setup_type"] == "RSI_SCALP") & (bsc >= 2) & (bsc <= 3), "stage"] = 2
+    df.loc[(df["setup_type"] == "RSI_SCALP") & (bsc >= 4), "stage"] = 3
 
     return df
 
@@ -594,6 +603,7 @@ def simulate_trade(
     confidence_mode: str,
     risk_fraction: float,
     equity_before: float,
+    stage: int = 0,
 ) -> dict:
     entry_row = df.iloc[entry_idx]
     entry_price = float(entry_row["close"])
@@ -604,15 +614,18 @@ def simulate_trade(
     risk_amount = equity_before * risk_fraction
     position_notional = risk_amount / stop_distance_pct if stop_distance_pct > 0 else 0.0
 
+    # Strategy-specific TP2
+    tp2_pct = TP2_PCT_TREND if strategy == "RSI_TREND" else TP2_PCT_SCALP
+
     if direction == 1:
         tp1 = entry_price * (1 + TP1_PCT)
-        tp2 = entry_price * (1 + TP2_PCT)
+        tp2 = entry_price * (1 + tp2_pct)
         tp3 = entry_price * (1 + TP3_PCT)
         tp4 = entry_price * (1 + TP4_PCT)
         break_even_price = entry_price * (1 + BREAK_EVEN_OFFSET)
     else:
         tp1 = entry_price * (1 - TP1_PCT)
-        tp2 = entry_price * (1 - TP2_PCT)
+        tp2 = entry_price * (1 - tp2_pct)
         tp3 = entry_price * (1 - TP3_PCT)
         tp4 = entry_price * (1 - TP4_PCT)
         break_even_price = entry_price * (1 - BREAK_EVEN_OFFSET)
@@ -784,6 +797,7 @@ def simulate_trade(
         "direction": direction,
         "dir_label": direction_label(direction),
         "strategy": strategy,
+        "stage": stage,
         "confidence_raw": confidence,
         "confidence_mode": confidence_mode,
         "risk_fraction": risk_fraction,
@@ -828,6 +842,7 @@ def run_backtest(df: pd.DataFrame) -> pd.DataFrame:
             confidence_mode=str(row["confidence_mode"]),
             risk_fraction=float(row["risk_fraction"]),
             equity_before=float(equity),
+            stage=int(row.get("stage", 0)),
         )
         trades.append(trade)
         equity = float(trade["equity_after"])
@@ -924,6 +939,16 @@ def print_core_report(trades: pd.DataFrame, setups: pd.DataFrame) -> None:
         .agg(["count", "mean", "median", "sum"])
         .to_string()
     )
+
+    # Stage breakdown (RSI_SCALP only)
+    scalp_trades = trades[trades["strategy"] == "RSI_SCALP"]
+    if len(scalp_trades) > 0 and "stage" in scalp_trades.columns:
+        print("\nBY STAGE (RSI_SCALP only)")
+        print(
+            scalp_trades.groupby("stage", observed=True)["net_pnl_cash"]
+            .agg(["count", "mean", "median", "sum"])
+            .to_string()
+        )
 
     print("\nBY EXIT REASON")
     print(
