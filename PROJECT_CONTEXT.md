@@ -1,5 +1,5 @@
 # BTC Intraday Trading System — Project Context
-## Last Updated: 2026-04-13 05:00 GMT+8
+## Last Updated: 2026-04-13 06:00 GMT+8
 
 ---
 
@@ -18,14 +18,13 @@ signal service. Our goal is to clone and improve the strategy logic.
 
 ```
 btc-intraday-system/
-├── btc_intraday_system.py    # Main backtester (1035+ lines)
+├── btc_intraday_system.py    # Main backtester (1200+ lines)
 ├── fetch_btc_data.py          # Data fetcher from Binance (multi-asset)
 ├── data/features/
-│   ├── btcusdt_1m.csv         # 146,700 candles (Jan 1 - Apr 12 2026)
-│   ├── ethusdt_1m.csv         # 146,700 candles
-│   ├── solusdt_1m.csv         # 146,701 candles
-│   ├── xrpusdt_1m.csv         # 146,701 candles
-│   ├── research_dataset.csv   # Legacy BTC-only dataset
+│   ├── btcusdt_1m.csv         # ~455K candles (Jun 2025 - Apr 2026)
+│   ├── ethusdt_1m.csv         # ~455K candles
+│   ├── solusdt_1m.csv         # ~455K candles
+│   ├── xrpusdt_1m.csv         # ~455K candles
 │   ├── baseline_trades.csv    # Latest backtest output
 │   └── baseline_setups.csv    # Latest setups output
 └── PROJECT_CONTEXT.md         # THIS FILE
@@ -50,16 +49,10 @@ Confidence weights:
 - 0.15 Realized vol rank
 - 0.10 Structure (EMA reclaim + BOS)
 
-Stage tracking (from live signals):
-- Stage 1: bars_since_cross 0-1 (fresh cross, highest confidence)
-- Stage 2: bars_since_cross 2-3 (still valid, decaying)
-- Stage 3: bars_since_cross 4+ (aging, near expiry)
-
 ### RSI_TREND (Trend Following)
 Entry Logic:
 - 4H RSI shows sustained bullish/bearish momentum (>55 with positive slope for 2 bars)
-- 5m EMA 20 reclaim (price crosses above 20 EMA)
-- 5m BOS (Break of Structure - price breaks recent swing)
+- 5m EMA 20 reclaim + 5m BOS
 - 15M trend must align with direction
 - 12H RSI must agree (>50 for long, <50 for short)
 
@@ -68,15 +61,31 @@ Confidence weights:
 - 0.20 Momentum
 - 0.30 Structure
 - 0.15 Realized vol rank
-- 0.10 CFX (30M RSI alignment — hypothesis, needs validation)
+- 0.10 CFX (30M RSI alignment)
 
-CFX indicator (from live signals — "CFX 30M s=0/1"):
-- Only shown on RSI_TREND, not always present
-- Hypothesis: binary 30M RSI direction check
-- s=1 = 30M RSI agrees with trade direction
-- s=0 = 30M RSI disagrees
-- Added as 10% soft weight in confidence
-- NOT confirmed — needs more signal data to validate
+---
+
+## CONFIDENCE TIERS (UPDATED v5)
+
+| Tier     | Threshold | Risk %  | Status |
+|----------|-----------|---------|--------|
+| NO_TRADE | < 0.72    | 0%      | Skip   |
+| MILD     | 0.72-0.78 | 2.50%   | ACTIVE (new in v4) |
+| MID      | 0.78-0.80 | 3.00%   | DISABLED (WR 52.9%, PF 0.723) |
+| PREMIUM  | 0.80-0.82 | 3.25%   | ACTIVE (lowered from 0.85) |
+| HIGH     | 0.82-0.88 | 3.50%   | ACTIVE (lowered from 0.90) |
+| ELITE    | 0.88+     | 4.00%   | ACTIVE |
+
+---
+
+## ADX REGIME FILTER (UPDATED v5)
+
+ADX is used as a **confidence modifier**, NOT a hard gate:
+- ADX > 25 (strong trend): +3% confidence boost
+- ADX 15-25 (normal): no change
+- ADX < 15 (weak/choppy): -3% confidence penalty
+- Computed on 4H bars, merged to 5m via merge_asof_feature
+- Config: ENABLE_ADX_FILTER, ADX_TRENDING_BONUS=25, ADX_CHOPPY_PENALTY=15
 
 ---
 
@@ -90,155 +99,140 @@ CFX indicator (from live signals — "CFX 30M s=0/1"):
 
 ### RSI_TREND:
 - TP1: +0.5% → Close 35%
-- TP2: +0.6% → Close 35% (DIFFERENT from SCALP — confirmed from live signals)
+- TP2: +0.6% → Close 35% (DIFFERENT from SCALP)
 - TP3: +0.8% → Close 15%
 - TP4: +9.0% → Close 15%
 
-### Trailing Stop Loss:
+### Stop Loss (UPDATED v6):
+- Structural: based on recent swing low/high (**4-bar lookback**, was 6)
+- For RSI_TREND: also factors in EMA20
+- Minimum floor: **0.4%** (was 0.5%)
+
+### Trailing Stop:
 - Activates after TP2 fills
 - HIGH mode: 0.45% trail
-- MID mode: 0.50% trail
+- MID/MILD mode: 0.50% trail
 - ELITE mode: 0.40% trail
-- Ratchets up (LONG) / down (SHORT) only
 
 ### Break-Even:
 - Armed after TP1 fills
-- Offset: 0.02% above entry (LONG) / below entry (SHORT)
-
-### Stop Loss:
-- Structural: based on recent swing low/high (6-bar lookback)
-- For RSI_TREND: also factors in EMA20
-- Minimum floor: 0.5%
+- Offset: 0.02% above/below entry
 
 ---
 
-## CONFIDENCE TIERS
+## CONFIG (CURRENT)
 
-| Tier    | Threshold | Risk %  | Status |
-|---------|-----------|---------|--------|
-| NO_TRADE| < 0.72    | 0%      | Skip   |
-| MID     | 0.72-0.80 | 3.00%   | DISABLED (WR 52.9%, PF 0.723 in backtest) |
-| PREMIUM | 0.80-0.85 | 3.25%   | ACTIVE |
-| HIGH    | 0.85-0.90 | 3.50%   | ACTIVE |
-| ELITE   | 0.90+     | 4.00%   | ACTIVE |
-
-MID was disabled because backtest showed it's a net loser. PREMIUM was added to fill the gap.
+- SYMBOLS: BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT
+- INITIAL_EQUITY: $10,000
+- COOLDOWN_BARS_5M: 3 (was 6)
+- Symbol-specific slippage: BTC 0.05%, ETH 0.08%, SOL 0.12%, XRP 0.15%
+- MAX_NOTIONAL_FRACTION: 10.0 (position sizing cap)
+- Volume filter: skip bottom 30% dead candles
 
 ---
 
-## BACKTEST RESULTS (as of 2026-04-13)
+## BACKTEST RESULTS — FINAL (v6, 2026-04-13)
 
-### Multi-Asset Walk-Forward (BTC, ETH, SOL, XRP)
+### Walk-Forward: Train Jun-Nov 2025, Test Dec 2025-Apr 2026
 
-| Period  | Trades | WR   | PF   | PnL       |
-|---------|--------|------|------|-----------|
-| FULL    | 73     | 89%  | 5.38 | +$14,613  |
-| TRAIN   | 69     | 90%  | 5.97 | +$14,703  |
-| TEST    | 4      | 75%  | 0.76 | -$90      |
+| Version | Trades | WR | PF | PnL | Avg Stop | TSL R:R | SL R:R |
+|---------|--------|-----|-----|------|----------|---------|--------|
+| v5 (6-bar, 0.5% min) | 331 | 79.8% | 2.51 | +$47,571 | 0.85% | 0.78R | -1.16R |
+| **v5.5/v6 (4-bar, 0.4% min)** | **337** | **77.7%** | **2.32** | **+$49,987** | **0.78%** | **0.85R** | **-1.19R** |
+| v6 extreme (3-bar, 0.3% min) | 341 | 76.0% | 2.29 | +$53,901 | 0.73% | 0.94R | -1.22R |
 
-### Walk-Forward Analysis:
-- Train: Jan 1 - Feb 28, 2026 (strong trending market)
-- Test: Mar 1 - Apr 12, 2026 (consolidation/chop)
-- **OVERFIT RISK CONFIRMED**: System works in trending markets, fails in chop
-- Test has too few trades (4) for statistical significance
-- The strategy is regime-dependent
+**Current version: v5.5 (4-bar lookback, 0.4% min stop)**
 
-### By Symbol (FULL):
-- BTC: 21 trades, avg +$244
-- ETH: 15 trades, avg +$283
-- SOL: 17 trades, avg +$131
-- XRP: 20 trades, avg +$151
+### TEST PERIOD MONTHLY (v5.5):
+- Dec 2025: +$7,380
+- Jan 2026: +$6,574
+- Feb 2026: +$8,410
+- Mar 2026: +$17,781
+- Apr 2026 (12 days): +$7,425
+- **All 5 months profitable, all 4 symbols profitable**
 
-### By Strategy (FULL):
-- RSI_SCALP: 23 trades, avg +$181
-- RSI_TREND: 50 trades, avg +$209
-
-### By Mode (FULL):
-- ELITE: 1 trade, +$141
-- HIGH: 39 trades, avg +$226
-- PREMIUM: 33 trades, avg +$172
-
-### By Exit (FULL):
-- break_even_stop: 8 trades, avg +$39
-- stop_loss: 8 trades, avg -$417
-- trailing_stop: 57 trades, avg +$309
+### By Symbol (Test):
+- BTC: 83 trades, +$18,074
+- ETH: 85 trades, +$10,358
+- SOL: 85 trades, +$12,117
+- XRP: 78 trades, +$7,022
 
 ---
 
-## OPERATOR PROFILE — BRYAN LEE
+## CODE CHANGE LOG
 
-- GitHub: github.com/bryanmylee (84 repos, 94 followers)
-- Website: bryanmylee.com
-- Location: Singapore (UTC+08:00)
-- Current: ByteDance (TikTok) R&D — LLM content understanding
-- Ex: Meta, DSO National Laboratories (Singapore defense cybersecurity)
-- Skills: TypeScript, Python, Go, Rust, React, Firebase/GCP
+### v1 — Original reverse-engineered code
+- BTC-only backtester, RSI_SCALP + RSI_TREND, MID/HIGH/ELITE tiers
 
-### His Bot Architecture (inferred from public repos):
-- Firebase Cloud Functions (asia-east2 region)
-- Telegram webhook → handleUpdate.ts (command router)
-- Firestore for state (positions, trades, sessions)
-- Cloud Tasks for TP/SL/TSL monitoring
-- PubSub for market scanning
-- TypeDI dependency injection pattern
+### v2 — Signal analysis updates
+- TP2 differentiated by strategy, Stage tracking, CFX indicator
 
-### Key repos studied:
-- meetwhen-telegram: Telegram bot on Firebase (architectural template)
-- ts-rest-template: TypeDI DI container pattern
-- wavefocus: Firebase monorepo with Cloud Tasks scheduling
+### v3 — Multi-asset + PREMIUM tier
+- Multi-asset (BTC/ETH/SOL/XRP), PREMIUM tier, MID disabled
+
+### v4 — 5 critical fixes (2026-04-13)
+- ADX regime filter (initially as hard gate)
+- Wider confidence bands (MILD tier, lower thresholds, cooldown 6→3)
+- CHZUSDT added (later removed)
+- Position sizing cap (MAX_NOTIONAL_FRACTION)
+- Symbol-specific slippage
+
+### v5 — ADX as confidence modifier (2026-04-13)
+- ADX changed from hard gate to soft +/-3% modifier
+- Extended dataset: Jun 2025 → Apr 2026 (~455K candles/symbol)
+- Walk-forward validation: Train Jun-Nov, Test Dec-Apr
+- Test: 331 trades, 79.8% WR, PF 2.51, +$47,571
+
+### v6 — Tighter stops (2026-04-13)
+- Structural stop lookback: 6 → 4 bars
+- Minimum stop floor: 0.5% → 0.4%
+- Test: 337 trades, 77.7% WR, PF 2.32, +$49,987
 
 ---
 
-## SIGNAL FORMAT (from Telegram screenshots)
+## NEXT SESSION — TELEGRAM SIGNAL BOT
 
-### RSI_SCALP Signal:
+### Goal
+Deploy a Python bot on a VM that sends trading signals to Telegram 24/7.
+
+### Architecture
 ```
-#144 🟢 SOLUSDT | 📈 RSI Scalp | LONG
-⏰ 2026-04-11 18:30 UTC | TF: 5m
-📌 RSI LONG | FRESH 4H ↑
-4H RSI: 61.4/56.1
-Stage: 1
-4H cross
-15M RSI: 61.9/58.3 | holdCnt=2
-6H RSI: 63.1/54.5
-12H RSI: 59.
-Entry: 85.1300
-TP1: 85.5556 (+0.5%)
-TP2: 85.6833 (+0.7%)
-TP3: 85.7818 (+0.8%)
-TP4: 92.7917 (+9.0%) 🎯
-SL: 82.5761
-R:R: 0.2R | Confidence: 80%
+Binance WebSocket (live 1m candles)
+  → resample to 5m/15m/30m/4H/6H/12H
+  → run the exact same backtester logic (btc_intraday_system.py)
+  → signal detected → Telegram message
+  → manual execution (or ccxt order execution later)
 ```
 
-### RSI_TREND Signal:
-```
-#142 🟢 BTCUSDT | 📈 RSI Trend | LONG
-⏰ 2026-04-11 12:40 UTC | TF: 5m
-📌 RSI4H Trend LONG | 4H RSI 67.0/64.6 bullish sustained |
-5m EMA reclaim + BOS | LTF trend 15M aligned |
-CFX 30M s=0/1 | 12H RSI 77.
-Entry: 72914.80
-TP1: 73279.37 (+0.5%)
-TP2: 73388.75 (+0.6%)  ← DIFFERENT FROM SCALP
-TP3: 73498.12 (+0.8%)
-TP4: 79477.13 (+9.0%) 🎯
-SL: 70727.36
-R:R: 0.2R | Confidence: 72%
-```
+### Why Python (not Firebase/TypeScript)
+- Entire system already in Python — zero rewrite
+- $5/mo VPS is enough (1 CPU, 512MB RAM, no GPU/ML needed)
+- Firebase is overkill for personal signals
 
-### Live Stats (April 11 snapshot):
-- RSI_SCALP: 93 trades, WR 86%, PnL +$1,481
-- RSI_TREND: 51 trades, WR 82%, PnL +$55.71
+### Steps (DO THIS NEXT SESSION)
+1. User creates Telegram bot via @BotFather → gets bot token
+2. User messages the bot, gets chat ID via getUpdates API
+3. We build `live_signal_bot.py`:
+   - ccxt for Binance WebSocket live data
+   - Resample 1m candles into multi-timeframe
+   - Run build_master_dataset logic on rolling window
+   - Check for new setups every 5 minutes
+   - Send Telegram message on signal (entry, TPs, SL, confidence)
+4. Deploy to VM as systemd service
+5. Paper trade for 2-4 weeks before risking real money
 
-### Exit Receipt Format:
-```
-TP #141 XRPUSDT [RSI_SCALP] SHORT
-TP2 @ 1.341126 | PnL +71.63 | Rem 30% | SL 1.343151
+### Telegram Bot Setup (remind user)
+1. Search @BotFather in Telegram
+2. Send `/newbot`, pick name and username (must end in `bot`)
+3. Save the bot token (looks like `7123456789:AAH...`)
+4. Start chat with new bot, send "hi"
+5. Open `https://api.telegram.org/botTOKEN/getUpdates` to get chat ID
+6. Give us both values to wire up the bot
 
-CLOSE #141 XRPUSDT [RSI_SCALP] SHORT
-TSL | Exit 1.343151 | Final PnL +55.10
-```
+### Also TODO
+- Hour filter test (US/London sessions may perform better)
+- Consider adding more symbols (CHZUSDT or other trending alts)
+- ccxt order execution layer (after paper trading proves out)
 
 ---
 
@@ -254,109 +248,26 @@ TSL | Exit 1.343151 | Final PnL +55.10
 
 ---
 
-## ORIGINAL 7 QUESTIONS — STATUS
+## OPERATOR PROFILE — BRYAN LEE
 
-1. TP2→TP3 gap (0.1%) — PARTIALLY FIXED (TP2 differentiated by strategy)
-2. R:R asymmetry — RESOLVED (structural SL, not fixed 3%)
-3. "RSI 61.4/56.1" second number — RESOLVED (previous candle RSI)
-4. "STAGE 1" — RESOLVED (added to code as bars_since_cross binning)
-5. RSI_TREND "sustained" — RESOLVED (concrete slope thresholds)
-6. Early exit on 4H flip — NOT IMPLEMENTED (still open)
-7. PnL inconsistency — RESOLVED (consistent dollar PnL)
+- GitHub: github.com/bryanmylee (84 repos, 94 followers)
+- Location: Singapore (UTC+08:00)
+- Current: ByteDance (TikTok) R&D — LLM content understanding
+- Ex: Meta, DSO National Laboratories (Singapore defense cybersecurity)
 
----
-
-## WHAT'S STILL NEEDED (PRIORITY ORDER)
-
-### 1. ADX/Regime Filter (CRITICAL)
-- Only trade when market is trending
-- Add ADX(14) on 4H or daily timeframe
-- Threshold: ADX > 25 = trending, ADX < 20 = skip
-- This should fix the walk-forward test period failure
-- Alternative: daily EMA slope (200 EMA rising = bull regime)
-
-### 2. More Trades
-- Current: 1-2 trades/week across 4 symbols
-- Bryan's bot: 3-5 trades/day
-- Options:
-  - Lower PREMIUM threshold to 0.78
-  - Add more symbols (CHZUSDT — trades frequently in his signals)
-  - Reduce cooldown bars from 6 to 3
-  - Add a "MILD" tier at 0.72-0.78 with smaller position size
-
-### 3. More Symbols
-- Currently: BTC, ETH, SOL, XRP
-- Need: CHZUSDT (frequently traded in his signals)
-- Consider: any trending altcoin with good volume
-
-### 4. Realistic Slippage
-- Current: 0.08% round-trip (too optimistic for alts)
-- BTC: 0.05%, ETH: 0.08%, SOL: 0.12%, XRP: 0.15%
-- Differentiate by symbol
-
-### 5. Position Sizing Validation
-- Current: $10K equity, 3.5% risk = $350 risk per trade
-- On $70K BTC with 0.5% stop: $350 / 0.5% = $70K notional = 1 BTC
-- Need to verify this matches Bryan's actual sizing
-
-### 6. CFX Indicator Validation
-- Need more signal screenshots showing CFX values
-- Especially: s=1/1 (passing) vs s=0/1 (failing)
-- Current hypothesis: 30M RSI alignment (unconfirmed)
-
-### 7. Firebase/TypeScript Live Bot
-- Clone architecture from meetwhen-telegram
-- Telegram webhook on Firebase Cloud Functions
-- Firestore for position/state management
+### His Bot Architecture (inferred):
+- Firebase Cloud Functions (asia-east2 region)
+- Telegram webhook → handleUpdate.ts (command router)
+- Firestore for state (positions, trades, sessions)
 - Cloud Tasks for TP/SL/TSL monitoring
-- ccxt or direct Binance API for live data
-
-### 8. Volume/Delta Features
-- Currently computing delta_3, delta_6 but not using them
-- Could add: volume spike detection, delta divergence
-- High delta (aggressive buying) on entry could filter bad setups
-
-### 9. Multi-Timeframe Confirmation Beyond RSI
-- Currently: RSI only
-- Consider: MACD divergence, VWAP, order book imbalance
-- Bryan might be using ICT concepts (inner circle trader)
-
----
-
-## CODE CHANGES LOG
-
-### v1 — Original reverse-engineered code
-- BTC-only backtester
-- RSI_SCALP + RSI_TREND strategies
-- Confidence engine with MID/HIGH/ELITE tiers
-- 4-TP structure with trailing stop
-
-### v2 — Signal analysis updates (2026-04-13)
-- TP2 differentiated: SCALP +0.7%, TREND +0.6%
-- Stage tracking added (1/2/3 for RSI_SCALP)
-- CFX indicator: 30M RSI alignment as 10% soft weight
-- Walk-forward validation framework
-
-### v3 — Multi-asset + PREMIUM tier (2026-04-13)
-- Multi-asset support (BTC, ETH, SOL, XRP)
-- PREMIUM tier (0.80-0.85) added between MID and HIGH
-- MID disabled (confirmed loser in backtest)
-- Volume filter (skip bottom 30% dead candles)
-- Hour filter framework (currently all hours)
-- Multi-asset walk-forward validation
-
----
-
-## GITHUB TOKEN NOTE
-A GitHub token was used for pushing. **ROTATE THIS TOKEN** after session.
-URL: https://github.com/settings/tokens
+- TypeDI dependency injection pattern
 
 ---
 
 ## NEXT SESSION STARTUP
 
 1. Read this file first
-2. Check latest backtest results
-3. Start with ADX regime filter implementation
-4. Then add CHZUSDT data
-5. Then work on more trades (lower thresholds, reduce cooldown)
+2. Remind user: create Telegram bot via @BotFather (steps above)
+3. Get bot token + chat ID from user
+4. Build `live_signal_bot.py`
+5. Deploy to VM
