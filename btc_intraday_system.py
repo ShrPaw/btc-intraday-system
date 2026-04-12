@@ -8,16 +8,34 @@ import numpy as np
 
 INPUT_PATH = "data/features/research_dataset.csv"
 # Multi-asset: run backtest on each symbol and combine
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "CHZUSDT"]
 
 RSI_PERIOD = 14
 EMA_PERIOD = 20
 
 INITIAL_EQUITY = 10000.0
-ROUND_TRIP_COST = 0.0008
+
+# ── Fix #5: Symbol-specific slippage ──
+ROUND_TRIP_COST_DEFAULT = 0.0008
+ROUND_TRIP_COST_BY_SYMBOL = {
+    "BTCUSDT": 0.0005,
+    "ETHUSDT": 0.0008,
+    "SOLUSDT": 0.0012,
+    "XRPUSDT": 0.0015,
+    "CHZUSDT": 0.0015,   # low-liquidity alt
+}
+
+def get_round_trip_cost(symbol: str) -> float:
+    return ROUND_TRIP_COST_BY_SYMBOL.get(symbol, ROUND_TRIP_COST_DEFAULT)
+
+# ── Fix #4: Position sizing config ──
+# Max notional as fraction of equity (prevents oversized positions on expensive assets)
+MAX_NOTIONAL_FRACTION = 10.0   # position_notional <= equity * 10 (10x leverage cap)
+# If position_notional > equity * MAX_NOTIONAL_FRACTION, scale risk_fraction down
 
 # Risk by mode
 RISK_LOW = 0.0000
+RISK_MILD = 0.0250     # NEW: smaller size for marginal setups (0.72-0.78)
 RISK_MID = 0.0300
 RISK_PREMIUM = 0.0325   # between MID and HIGH
 RISK_HIGH = 0.0350
@@ -44,13 +62,15 @@ TRAIL_PCT_ELITE = 0.0040
 ENABLE_BREAK_EVEN_AFTER_TP1 = True
 BREAK_EVEN_OFFSET = 0.0002
 
-COOLDOWN_BARS_5M = 6
+# ── Fix #2: Reduced cooldown + wider bands ──
+COOLDOWN_BARS_5M = 3   # was 6 — more trades per week
 
-# Confidence bands
+# Confidence bands — lowered to generate more trades
 NO_TRADE_THRESHOLD = 0.72
+MILD_THRESHOLD = 0.78    # NEW: small-size tier for marginal setups
 MID_THRESHOLD = 0.80
-PREMIUM_THRESHOLD = 0.85   # new tier: between MID (disabled) and HIGH
-HIGH_THRESHOLD = 0.90
+PREMIUM_THRESHOLD = 0.82  # was 0.85 — widened
+HIGH_THRESHOLD = 0.88     # was 0.90 — widened
 
 USE_HOUR_FILTER = True
 # Crypto trades 24/7 but some hours have better liquidity/moves:
@@ -79,9 +99,12 @@ elif BASELINE_MODE == "MID_ONLY":
     ALLOW_SHORT = True
 
 elif BASELINE_MODE == "HYBRID":
-    # MID disabled: WR 52.9%, PF 0.723 in backtest — confirmed drag
-    # CFX gating wasn't enough to save it
-    ALLOWED_MODES = {"HIGH"}
+    # MILD (0.72-0.78): small size, all directions — was being skipped entirely
+    # PREMIUM (0.80-0.82): active
+    # HIGH (0.82-0.88): active
+    # ELITE (0.88+): active
+    # MID (0.78-0.80): still disabled (confirmed drag)
+    ALLOWED_MODES = {"MILD", "HIGH", "PREMIUM", "ELITE"}
     ALLOW_LONG = True
     ALLOW_SHORT = True
 
@@ -240,6 +263,63 @@ def add_extra_features_5m(df: pd.DataFrame) -> pd.DataFrame:
     df["rv_6"] = df["ret_1"].rolling(6).std()
     df["delta_3"] = df["delta"].rolling(3).sum()
     df["delta_6"] = df["delta"].rolling(6).sum()
+
+    return df
+
+
+# =========================================================
+# FIX #1: ADX REGIME FILTER
+# =========================================================
+
+# Config
+ADX_PERIOD = 14
+ADX_TRENDING_THRESHOLD = 25.0   # ADX > 25 = trending market
+ADX_CHOPPY_THRESHOLD = 20.0     # ADX < 20 = definitely choppy, skip
+ENABLE_ADX_FILTER = True
+
+def compute_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.DataFrame:
+    """
+    Compute ADX (Average Directional Index) from OHLC bars.
+    Returns the dataframe with +DI, -DI, DX, ADX columns added.
+    """
+    df = df.copy()
+
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+
+    # True Range
+    tr1 = high - low
+    tr2 = (high - close.shift(1)).abs()
+    tr3 = (low - close.shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+    # Directional Movement
+    up_move = high - high.shift(1)
+    down_move = low.shift(1) - low
+
+    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+
+    # Smoothed (Wilder's method = EMA with alpha=1/period)
+    alpha = 1.0 / period
+    tr_smooth = pd.Series(tr).ewm(alpha=alpha, adjust=False, min_periods=period).mean()
+    plus_dm_smooth = pd.Series(plus_dm).ewm(alpha=alpha, adjust=False, min_periods=period).mean()
+    minus_dm_smooth = pd.Series(minus_dm).ewm(alpha=alpha, adjust=False, min_periods=period).mean()
+
+    # Directional Indicators
+    plus_di = 100.0 * plus_dm_smooth / tr_smooth.replace(0, np.nan)
+    minus_di = 100.0 * minus_dm_smooth / tr_smooth.replace(0, np.nan)
+
+    # DX and ADX
+    di_sum = plus_di + minus_di
+    dx = 100.0 * (plus_di - minus_di).abs() / di_sum.replace(0, np.nan)
+    adx = dx.ewm(alpha=alpha, adjust=False, min_periods=period).mean()
+
+    df["plus_di"] = plus_di.values
+    df["minus_di"] = minus_di.values
+    df["dx"] = dx.values
+    df["adx"] = adx.values
 
     return df
 
@@ -446,28 +526,41 @@ def build_confidence_engine(df: pd.DataFrame) -> pd.DataFrame:
     out["confidence_mode"] = "NO_TRADE"
     out["risk_fraction"] = 0.0
 
+    # MILD: 0.72-0.78 — small size, marginal setups (new tier for more trades)
     out.loc[
         (out["confidence_raw"] >= NO_TRADE_THRESHOLD) &
+        (out["confidence_raw"] < MILD_THRESHOLD),
+        "confidence_mode"
+    ] = "MILD"
+
+    # MID: 0.78-0.80 — still disabled (confirmed drag in backtest)
+    out.loc[
+        (out["confidence_raw"] >= MILD_THRESHOLD) &
         (out["confidence_raw"] < MID_THRESHOLD),
         "confidence_mode"
     ] = "MID"
 
+    # PREMIUM: 0.80-0.82
     out.loc[
         (out["confidence_raw"] >= MID_THRESHOLD) &
         (out["confidence_raw"] < PREMIUM_THRESHOLD),
         "confidence_mode"
     ] = "PREMIUM"
 
+    # HIGH: 0.82-0.88
     out.loc[
-        out["confidence_raw"] >= PREMIUM_THRESHOLD,
+        (out["confidence_raw"] >= PREMIUM_THRESHOLD) &
+        (out["confidence_raw"] < HIGH_THRESHOLD),
         "confidence_mode"
     ] = "HIGH"
 
+    # ELITE: 0.88+ with elite_gate
     out.loc[
         (out["confidence_raw"] >= HIGH_THRESHOLD) & elite_gate,
         "confidence_mode"
     ] = "ELITE"
 
+    out.loc[out["confidence_mode"] == "MILD", "risk_fraction"] = RISK_MILD
     out.loc[out["confidence_mode"] == "MID", "risk_fraction"] = RISK_MID
     out.loc[out["confidence_mode"] == "PREMIUM", "risk_fraction"] = RISK_PREMIUM
     out.loc[out["confidence_mode"] == "HIGH", "risk_fraction"] = RISK_HIGH
@@ -551,12 +644,14 @@ def add_trade_decision(df: pd.DataFrame) -> pd.DataFrame:
     if BASELINE_MODE == "HYBRID":
         # HIGH: all directions
         high_ok = (out["confidence_mode"] == "HIGH") & out["direction"].isin({1, -1})
-        # PREMIUM: new tier 0.80-0.85 (was MID band, now separate label)
+        # PREMIUM: new tier 0.82-0.88
         premium_ok = (out["confidence_mode"] == "PREMIUM") & out["direction"].isin({1, -1})
         # ELITE: treated as HIGH
         elite_ok = (out["confidence_mode"] == "ELITE") & out["direction"].isin({1, -1})
-        # MID: still disabled (0.72-0.80 low confidence)
-        mode_direction_ok = high_ok | premium_ok | elite_ok
+        # MILD: small size, marginal setups (0.72-0.78)
+        mild_ok = (out["confidence_mode"] == "MILD") & out["direction"].isin({1, -1})
+        # MID: still disabled (0.78-0.80)
+        mode_direction_ok = high_ok | premium_ok | elite_ok | mild_ok
     else:
         mode_direction_ok = (
             out["confidence_mode"].isin(ALLOWED_MODES) &
@@ -580,6 +675,20 @@ def add_trade_decision(df: pd.DataFrame) -> pd.DataFrame:
             ((out["direction"] == -1) & (out["delta_3"] < 0))
         )
 
+    # ── Fix #1: ADX regime filter ──
+    # Only trade when market is trending (ADX > threshold)
+    # Between choppy_threshold and trending_threshold: allow but only higher confidence
+    regime_ok = True
+    if ENABLE_ADX_FILTER and "adx" in out.columns:
+        adx_val = out["adx"].fillna(0)
+        # Hard skip: ADX < 20 = definitely choppy
+        regime_ok = adx_val >= ADX_CHOPPY_THRESHOLD
+        # Softer gate: ADX 20-25 = only take HIGH/ELITE (skip MILD/PREMIUM)
+        mid_adx = (adx_val >= ADX_CHOPPY_THRESHOLD) & (adx_val < ADX_TRENDING_THRESHOLD)
+        high_only = out["confidence_mode"].isin({"HIGH", "ELITE"})
+        # In mid-ADX zone: only high confidence trades pass
+        regime_ok = regime_ok & (~mid_adx | high_only)
+
     out["take_trade"] = (
         (out["setup_type"] != "none") &
         out["trigger_ok"] &
@@ -587,7 +696,8 @@ def add_trade_decision(df: pd.DataFrame) -> pd.DataFrame:
         mode_direction_ok &
         hour_ok &
         volume_ok &
-        delta_ok
+        delta_ok &
+        regime_ok
     )
 
     return out
@@ -627,6 +737,8 @@ def compute_stop_price(df: pd.DataFrame, entry_idx: int, direction: int, strateg
 
 
 def get_trail_pct(confidence_mode: str) -> float:
+    if confidence_mode == "MILD":
+        return TRAIL_PCT_MID   # wider trail for lower confidence
     if confidence_mode == "MID":
         return TRAIL_PCT_MID
     if confidence_mode == "PREMIUM":
@@ -653,6 +765,7 @@ def simulate_trade(
     equity_before: float,
     stage: int = 0,
     cfx_score: float = 0.0,
+    symbol: str = "BTCUSDT",
 ) -> dict:
     entry_row = df.iloc[entry_idx]
     entry_price = float(entry_row["close"])
@@ -662,6 +775,13 @@ def simulate_trade(
 
     risk_amount = equity_before * risk_fraction
     position_notional = risk_amount / stop_distance_pct if stop_distance_pct > 0 else 0.0
+
+    # ── Fix #4: Position sizing cap ──
+    max_notional = equity_before * MAX_NOTIONAL_FRACTION
+    if position_notional > max_notional:
+        # Scale risk down so notional doesn't exceed cap
+        position_notional = max_notional
+        risk_amount = position_notional * stop_distance_pct
 
     # Strategy-specific TP2
     tp2_pct = TP2_PCT_TREND if strategy == "RSI_TREND" else TP2_PCT_SCALP
@@ -833,7 +953,9 @@ def simulate_trade(
             exit_price = close
 
     gross_pnl_cash = position_notional * realized_return_pct
-    cost_cash = position_notional * ROUND_TRIP_COST
+    # ── Fix #5: Symbol-specific slippage ──
+    round_trip_cost = get_round_trip_cost(symbol)
+    cost_cash = position_notional * round_trip_cost
     net_pnl_cash = gross_pnl_cash - cost_cash
     equity_after = equity_before + net_pnl_cash
 
@@ -867,7 +989,7 @@ def simulate_trade(
     }
 
 
-def run_backtest(df: pd.DataFrame) -> pd.DataFrame:
+def run_backtest(df: pd.DataFrame, symbol: str = "BTCUSDT") -> pd.DataFrame:
     trades = []
     next_allowed_idx = 0
     i = 0
@@ -894,6 +1016,7 @@ def run_backtest(df: pd.DataFrame) -> pd.DataFrame:
             equity_before=float(equity),
             stage=int(row.get("stage", 0)),
             cfx_score=float(row.get("cfx_score", 0)),
+            symbol=symbol,
         )
         trades.append(trade)
         equity = float(trade["equity_after"])
@@ -921,7 +1044,8 @@ def compute_max_drawdown(equity_curve: pd.Series) -> float:
 
 def print_core_report(trades: pd.DataFrame, setups: pd.DataFrame) -> None:
     print("=" * 80)
-    print("BASELINE_MODE:", BASELINE_MODE, "(HIGH ONLY — MID DISABLED)")
+    print("BASELINE_MODE:", BASELINE_MODE, "(MILD + PREMIUM + HIGH + ELITE | MID DISABLED)")
+    print("ADX FILTER:", "ON" if ENABLE_ADX_FILTER else "OFF", f"(trending >{ADX_TRENDING_THRESHOLD}, choppy <{ADX_CHOPPY_THRESHOLD})")
     print("SHORT VALIDATION: STANDBY (no MID shorts allowed)")
     print("=" * 80)
 
@@ -1076,6 +1200,11 @@ def build_master_dataset(path: str = None) -> pd.DataFrame:
     bars_15m = add_rsi_features(bars_15m, RSI_PERIOD)
     bars_30m = add_rsi_features(bars_30m, RSI_PERIOD)
     bars_4h = add_rsi_features(bars_4h, RSI_PERIOD)
+
+    # ── Fix #1: ADX regime filter ──
+    # Compute ADX on 4H bars (regime is a higher-TF concept)
+    bars_4h = compute_adx(bars_4h, ADX_PERIOD)
+
     bars_6h = add_rsi_features(bars_6h, RSI_PERIOD)
     bars_12h = add_rsi_features(bars_12h, RSI_PERIOD)
 
@@ -1083,7 +1212,7 @@ def build_master_dataset(path: str = None) -> pd.DataFrame:
 
     df = merge_asof_feature(df, bars_15m, "m15", ["rsi", "rsi_slope_1"])
     df = merge_asof_feature(df, bars_30m, "m30", ["rsi"])
-    df = merge_asof_feature(df, bars_4h, "h4", ["rsi", "rsi_slope_1", "rsi_slope_2", "fresh_long", "fresh_short", "bars_since_cross"])
+    df = merge_asof_feature(df, bars_4h, "h4", ["rsi", "rsi_slope_1", "rsi_slope_2", "fresh_long", "fresh_short", "bars_since_cross", "adx", "plus_di", "minus_di"])
     df = merge_asof_feature(df, bars_6h, "h6", ["rsi"])
     df = merge_asof_feature(df, bars_12h, "h12", ["rsi"])
 
@@ -1135,14 +1264,14 @@ def main():
         df_test = df[df["timestamp"] >= train_cutoff].copy()
 
         if len(df_train) > 100:
-            trades_train = run_backtest(df_train)
+            trades_train = run_backtest(df_train, symbol=symbol)
             trades_train["symbol"] = symbol
             trades_train["period"] = "TRAIN"
             all_trades_train.append(trades_train)
             print(f"  Train: {len(trades_train)} trades, WR {trades_train['win'].mean():.1%}" if len(trades_train) > 0 else f"  Train: 0 trades")
 
         if len(df_test) > 100:
-            trades_test = run_backtest(df_test)
+            trades_test = run_backtest(df_test, symbol=symbol)
             trades_test["symbol"] = symbol
             trades_test["period"] = "TEST"
             all_trades_test.append(trades_test)
