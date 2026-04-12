@@ -8,7 +8,7 @@ import numpy as np
 
 INPUT_PATH = "data/features/research_dataset.csv"
 # Multi-asset: run backtest on each symbol and combine
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "CHZUSDT"]
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
 
 RSI_PERIOD = 14
 EMA_PERIOD = 20
@@ -273,9 +273,9 @@ def add_extra_features_5m(df: pd.DataFrame) -> pd.DataFrame:
 
 # Config
 ADX_PERIOD = 14
-ADX_TRENDING_THRESHOLD = 25.0   # ADX > 25 = trending market
-ADX_CHOPPY_THRESHOLD = 20.0     # ADX < 20 = definitely choppy, skip
-ENABLE_ADX_FILTER = True
+ADX_TRENDING_BONUS = 25.0    # ADX > 25 = strong trend → confidence bonus
+ADX_CHOPPY_PENALTY = 15.0    # ADX < 15 = weak trend → confidence penalty
+ENABLE_ADX_FILTER = True     # now a confidence modifier, not a gate
 
 def compute_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.DataFrame:
     """
@@ -515,6 +515,19 @@ def build_confidence_engine(df: pd.DataFrame) -> pd.DataFrame:
     out.loc[trend_mask, "confidence_raw"] = trend_conf[trend_mask]
     out["confidence_raw"] = out["confidence_raw"].clip(0, 1)
 
+    # ── Fix #1: ADX as confidence modifier (not a gate) ──
+    # ADX confirms trend strength for the direction the system already chose
+    if ENABLE_ADX_FILTER and "h4_adx" in out.columns:
+        adx_val = out["h4_adx"].fillna(20)  # default to neutral if missing
+        adx_modifier = pd.Series(0.0, index=out.index)
+        adx_modifier[adx_val >= ADX_TRENDING_BONUS] = 0.03    # strong trend: +3%
+        adx_modifier[(adx_val >= 15) & (adx_val < 25)] = 0.0  # normal: no change
+        adx_modifier[adx_val < ADX_CHOPPY_PENALTY] = -0.03    # weak/choppy: -3%
+        out["confidence_raw"] = (out["confidence_raw"] + adx_modifier).clip(0, 1)
+        out["adx_modifier"] = adx_modifier
+    else:
+        out["adx_modifier"] = 0.0
+
     premium_fresh = fresh_base >= 0.80
     premium_momentum = momentum_score >= 0.70
     premium_structure = np.where(out["direction"] == 1, structure_long, structure_short) >= 0.85
@@ -675,20 +688,6 @@ def add_trade_decision(df: pd.DataFrame) -> pd.DataFrame:
             ((out["direction"] == -1) & (out["delta_3"] < 0))
         )
 
-    # ── Fix #1: ADX regime filter ──
-    # Only trade when market is trending (ADX > threshold)
-    # Between choppy_threshold and trending_threshold: allow but only higher confidence
-    regime_ok = True
-    if ENABLE_ADX_FILTER and "adx" in out.columns:
-        adx_val = out["adx"].fillna(0)
-        # Hard skip: ADX < 20 = definitely choppy
-        regime_ok = adx_val >= ADX_CHOPPY_THRESHOLD
-        # Softer gate: ADX 20-25 = only take HIGH/ELITE (skip MILD/PREMIUM)
-        mid_adx = (adx_val >= ADX_CHOPPY_THRESHOLD) & (adx_val < ADX_TRENDING_THRESHOLD)
-        high_only = out["confidence_mode"].isin({"HIGH", "ELITE"})
-        # In mid-ADX zone: only high confidence trades pass
-        regime_ok = regime_ok & (~mid_adx | high_only)
-
     out["take_trade"] = (
         (out["setup_type"] != "none") &
         out["trigger_ok"] &
@@ -696,8 +695,7 @@ def add_trade_decision(df: pd.DataFrame) -> pd.DataFrame:
         mode_direction_ok &
         hour_ok &
         volume_ok &
-        delta_ok &
-        regime_ok
+        delta_ok
     )
 
     return out
@@ -1241,7 +1239,7 @@ def main():
     print("MULTI-ASSET WALK-FORWARD VALIDATION")
     print("=" * 80)
 
-    train_cutoff = pd.Timestamp("2026-03-01")
+    train_cutoff = pd.Timestamp("2025-12-01")  # Train: Jun-Nov 2025, Test: Dec 2025-Apr 2026
     all_trades_train = []
     all_trades_test = []
     all_setups = []

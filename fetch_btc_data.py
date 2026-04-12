@@ -9,7 +9,7 @@ import time
 import os
 from datetime import datetime, timezone
 
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "CHZUSDT"]
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
 INTERVAL = "1m"
 LIMIT = 1000
 OUTPUT_DIR = "data/features"
@@ -31,7 +31,7 @@ def fetch_symbol(symbol):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     output_file = os.path.join(OUTPUT_DIR, f"{symbol.lower()}_1m.csv")
 
-    start_ms = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    start_ms = int(datetime(2025, 6, 1, tzinfo=timezone.utc).timestamp() * 1000)
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
     total_days = (now_ms - start_ms) / (24 * 60 * 60 * 1000)
