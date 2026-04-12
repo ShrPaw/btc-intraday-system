@@ -709,7 +709,7 @@ def compute_stop_price(df: pd.DataFrame, entry_idx: int, direction: int, strateg
     row = df.iloc[entry_idx]
     entry_price = float(row["close"])
 
-    recent_lookback = 6
+    recent_lookback = 4
     start = max(0, entry_idx - recent_lookback)
     window = df.iloc[start:entry_idx + 1]
 
@@ -724,7 +724,7 @@ def compute_stop_price(df: pd.DataFrame, entry_idx: int, direction: int, strateg
             structural_stop = max(structural_stop, float(row["ema20"]))
         stop_distance_pct = (structural_stop - entry_price) / entry_price
 
-    stop_distance_pct = max(stop_distance_pct, 0.005)
+    stop_distance_pct = max(stop_distance_pct, 0.004)
 
     if direction == 1:
         stop_price = entry_price * (1 - stop_distance_pct)
