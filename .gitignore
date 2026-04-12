@@ -1,0 +1,4 @@
+.env
+__pycache__/
+*.pyc
+live_bot.log
