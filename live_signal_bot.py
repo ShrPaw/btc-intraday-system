@@ -170,8 +170,19 @@ def execute_order(symbol: str, direction: str, size_usd: float, leverage: int = 
         price = ticker["last"]
         amount = size_usd / price
 
-        # Round amount to exchange precision
+        # Check minimum order size
         market = ex.market(symbol)
+        min_notional = market.get("limits", {}).get("cost", {}).get("min", 5.0)
+        if size_usd < min_notional:
+            log.warning(f"⚠️ {symbol} order ${size_usd:.2f} below min notional ${min_notional:.2f} — skipping")
+            return None
+
+        # Round amount to exchange precision
+        min_qty = market.get("limits", {}).get("amount", {}).get("min", 0)
+        if amount < min_qty:
+            log.warning(f"⚠️ {symbol} qty {amount:.8f} below min {min_qty} — skipping")
+            return None
+
         amount = ex.amount_to_precision(symbol, amount)
 
         order = ex.create_order(symbol, "market", side, amount)
