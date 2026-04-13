@@ -251,8 +251,8 @@ slShort = close * (1 + slDistShort)
 // VISUALS
 // =========================================================
 
-plot(ema20, "EMA 20", color=color.new(colorYellow, 30), linewidth=1)
-plot(ema50, "EMA 50", color=color.new(colorOrange, 30), linewidth=1)
+plot(ema20, "EMA 20", color=color.new(color.yellow, 30), linewidth=1)
+plot(ema50, "EMA 50", color=color.new(color.orange, 30), linewidth=1)
 
 if takeTrade and showLabels
     dirLabel = direction == 1 ? "LONG" : "SHORT"
