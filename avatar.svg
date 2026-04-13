@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background gradient -->
+    <radialGradient id="bg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#1a0a2e"/>
+      <stop offset="60%" stop-color="#0d0618"/>
+      <stop offset="100%" stop-color="#050208"/>
+    </radialGradient>
+    
+    <!-- Glow for eyes -->
+    <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00ff88" stop-opacity="1"/>
+      <stop offset="40%" stop-color="#00ff88" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#00ff88" stop-opacity="0"/>
+    </radialGradient>
+    
+    <!-- Glow for eye 2 -->
+    <radialGradient id="eyeGlow2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00ffaa" stop-opacity="1"/>
+      <stop offset="40%" stop-color="#00ff88" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#00ff88" stop-opacity="0"/>
+    </radialGradient>
+    
+    <!-- Wraith body gradient -->
+    <linearGradient id="wraithBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a1a4a" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#1a0d30" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#0a0515" stop-opacity="0"/>
+    </linearGradient>
+    
+    <!-- Mist/fog gradient -->
+    <radialGradient id="mist" cx="50%" cy="80%" r="50%">
+      <stop offset="0%" stop-color="#1a0a3a" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#050208" stop-opacity="0"/>
+    </radialGradient>
+    
+    <!-- Green accent glow -->
+    <radialGradient id="greenGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00ff88" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#00ff88" stop-opacity="0"/>
+    </radialGradient>
+    
+    <!-- Filter for glow effect -->
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="softBlur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <filter id="tinyBlur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+    
+    <!-- Clip for rounded avatar -->
+    <clipPath id="circle">
+      <circle cx="256" cy="256" r="256"/>
+    </clipPath>
+  </defs>
+  
+  <!-- Circle clip -->
+  <g clip-path="url(#circle)">
+    
+    <!-- Background -->
+    <rect width="512" height="512" fill="url(#bg)"/>
+    
+    <!-- Subtle background candlestick pattern -->
+    <g opacity="0.06" stroke="#00ff88" stroke-width="2" fill="none">
+      <!-- Candle 1 -->
+      <line x1="80" y1="350" x2="80" y2="280"/>
+      <rect x="72" y="300" width="16" height="40" rx="2"/>
+      <!-- Candle 2 -->
+      <line x1="140" y1="380" x2="140" y2="310"/>
+      <rect x="132" y="320" width="16" height="50" rx="2"/>
+      <!-- Candle 3 -->
+      <line x1="200" y1="340" x2="200" y2="250"/>
+      <rect x="192" y="260" width="16" height="60" rx="2"/>
+      <!-- Candle 4 -->
+      <line x1="260" y1="360" x2="260" y2="220"/>
+      <rect x="252" y="230" width="16" height="80" rx="2"/>
+      <!-- Candle 5 -->
+      <line x1="320" y1="320" x2="320" y2="200"/>
+      <rect x="312" y="210" width="16" height="90" rx="2"/>
+      <!-- Candle 6 -->
+      <line x1="380" y1="300" x2="380" y2="180"/>
+      <rect x="372" y="190" width="16" height="90" rx="2"/>
+      <!-- Candle 7 -->
+      <line x1="440" y1="280" x2="440" y2="160"/>
+      <rect x="432" y="170" width="16" height="90" rx="2"/>
+    </g>
+    
+    <!-- Rising chart line in background -->
+    <path d="M 50 400 Q 120 380 180 360 T 300 280 T 420 200 T 510 150" 
+          stroke="#00ff88" stroke-width="1.5" fill="none" opacity="0.08"/>
+    
+    <!-- Bottom mist layer -->
+    <ellipse cx="256" cy="480" rx="300" ry="120" fill="url(#mist)"/>
+    
+    <!-- Wraith cloak / body - the main spectral form -->
+    <path d="
+      M 140 420
+      C 140 420, 120 380, 115 340
+      C 108 290, 130 240, 160 210
+      C 175 195, 190 185, 200 170
+      L 210 155
+      C 220 140, 235 125, 256 118
+      C 277 125, 292 140, 302 155
+      L 312 170
+      C 322 185, 337 195, 352 210
+      C 382 240, 404 290, 397 340
+      C 392 380, 372 420, 372 420
+    " fill="url(#wraithBody)" stroke="#3a2060" stroke-width="1"/>
+    
+    <!-- Tattered cloak edges - left -->
+    <path d="M 140 420 C 135 440, 120 470, 100 490 L 80 512 L 140 512 C 145 480, 142 450, 140 420" 
+          fill="#1a0d30" opacity="0.5"/>
+    <path d="M 150 430 C 148 445, 142 465, 130 485 L 115 512 L 165 512 C 155 480, 152 455, 150 430" 
+          fill="#150a25" opacity="0.4"/>
+    
+    <!-- Tattered cloak edges - right -->
+    <path d="M 372 420 C 377 440, 392 470, 412 490 L 432 512 L 372 512 C 367 480, 370 450, 372 420" 
+          fill="#1a0d30" opacity="0.5"/>
+    <path d="M 362 430 C 364 445, 370 465, 382 485 L 397 512 L 347 512 C 357 480, 360 455, 362 430" 
+          fill="#150a25" opacity="0.4"/>
+    
+    <!-- Tattered center wisps -->
+    <path d="M 220 420 C 218 440, 210 460, 200 490 L 190 512 L 230 512 C 225 480, 222 450, 220 420" 
+          fill="#120820" opacity="0.3"/>
+    <path d="M 290 420 C 292 440, 300 460, 310 490 L 320 512 L 280 512 C 285 480, 288 450, 290 420" 
+          fill="#120820" opacity="0.3"/>
+    <path d="M 256 430 C 256 450, 252 470, 248 500 L 245 512 L 267 512 C 262 480, 258 455, 256 430" 
+          fill="#0d0618" opacity="0.25"/>
+    
+    <!-- Hood shadow -->
+    <ellipse cx="256" cy="195" rx="75" ry="85" fill="#0a0515" opacity="0.7"/>
+    
+    <!-- Inner hood darkness -->
+    <ellipse cx="256" cy="190" rx="55" ry="65" fill="#050208"/>
+    
+    <!-- Ethereal wisps emanating from wraith -->
+    <g opacity="0.3">
+      <path d="M 160 250 C 130 240, 100 260, 70 230" stroke="#00ff88" stroke-width="1.5" fill="none" filter="url(#softBlur)"/>
+      <path d="M 352 250 C 382 240, 412 260, 442 230" stroke="#00ff88" stroke-width="1.5" fill="none" filter="url(#softBlur)"/>
+      <path d="M 180 300 C 150 310, 110 290, 80 310" stroke="#00ff88" stroke-width="1" fill="none" filter="url(#softBlur)"/>
+      <path d="M 332 300 C 362 310, 402 290, 432 310" stroke="#00ff88" stroke-width="1" fill="none" filter="url(#softBlur)"/>
+    </g>
+    
+    <!-- LEFT EYE -->
+    <!-- Outer glow -->
+    <ellipse cx="232" cy="190" rx="22" ry="14" fill="url(#eyeGlow)" filter="url(#blur)"/>
+    <!-- Inner glow -->
+    <ellipse cx="232" cy="190" rx="12" ry="8" fill="url(#eyeGlow2)" filter="url(#softBlur)"/>
+    <!-- Eye core -->
+    <ellipse cx="232" cy="190" rx="6" ry="4" fill="#00ffaa"/>
+    <!-- Pupil slit -->
+    <ellipse cx="232" cy="190" rx="2.5" ry="4" fill="#004422"/>
+    
+    <!-- RIGHT EYE -->
+    <!-- Outer glow -->
+    <ellipse cx="280" cy="190" rx="22" ry="14" fill="url(#eyeGlow)" filter="url(#blur)"/>
+    <!-- Inner glow -->
+    <ellipse cx="280" cy="190" rx="12" ry="8" fill="url(#eyeGlow2)" filter="url(#softBlur)"/>
+    <!-- Eye core -->
+    <ellipse cx="280" cy="190" rx="6" ry="4" fill="#00ffaa"/>
+    <!-- Pupil slit -->
+    <ellipse cx="280" cy="190" rx="2.5" ry="4" fill="#004422"/>
+    
+    <!-- Subtle mouth / jaw crack -->
+    <path d="M 240 220 C 248 224, 264 224, 272 220" 
+          stroke="#00ff88" stroke-width="1" fill="none" opacity="0.25" filter="url(#tinyBlur)"/>
+    
+    <!-- Floating rune/marker near wraith -->
+    <g transform="translate(380, 160)" opacity="0.4">
+      <polygon points="0,-12 3,-3 12,-3 5,3 7,12 0,7 -7,12 -5,3 -12,-3 -3,-3" 
+               fill="none" stroke="#00ff88" stroke-width="0.8" filter="url(#tinyBlur)"/>
+    </g>
+    
+    <!-- Small diamond rune -->
+    <g transform="translate(120, 280)" opacity="0.3">
+      <rect x="-5" y="-5" width="10" height="10" transform="rotate(45)" 
+            fill="none" stroke="#00ff88" stroke-width="0.8" filter="url(#tinyBlur)"/>
+    </g>
+    
+    <!-- Ground fog -->
+    <g opacity="0.15">
+      <ellipse cx="150" cy="500" rx="120" ry="40" fill="#1a0a3a" filter="url(#softBlur)"/>
+      <ellipse cx="350" cy="505" rx="100" ry="35" fill="#1a0a3a" filter="url(#softBlur)"/>
+      <ellipse cx="256" cy="498" rx="150" ry="45" fill="#1a0a3a" filter="url(#softBlur)"/>
+    </g>
+    
+    <!-- Subtle vignette -->
+    <radialGradient id="vignette" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="transparent"/>
+      <stop offset="80%" stop-color="transparent"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.4"/>
+    </radialGradient>
+    <rect width="512" height="512" fill="url(#vignette)"/>
+    
+  </g>
+</svg>

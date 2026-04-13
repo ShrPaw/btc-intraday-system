@@ -134,7 +134,7 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - Volume filter: skip bottom 30% dead candles
 
 ### Live Bot:
-- Bot: @ShrPawsPsudoBot
+- Bot: WRAITH (@ShrPawsPsudoBot)
 - Rolling window: 10,080 1m candles (7 days)
 - Check interval: 60s
 - Default leverage: 5x
@@ -199,7 +199,7 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - Minimum stop floor: 0.5% → 0.4%
 - Test: 337 trades, 77.7% WR, PF 2.32, +$49,987
 
-### v7 — Live Signal Bot v2 (2026-04-13)
+### v7 — WRAITH Live Signal Bot (2026-04-13)
 - Telegram signal bot with inline trade buttons
 - Binance WebSocket for live 1m candles (BTC/ETH/SOL/XRP)
 - Multi-timeframe resampling + exact same backtester logic

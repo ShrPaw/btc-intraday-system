@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BTC Intraday Live Signal Bot v2
+WRAITH — Intraday Crypto Signal Bot
 - Binance WebSocket → multi-timeframe analysis → Telegram signals
 - Inline buttons for instant trade execution
 - Position monitoring with TP/SL alerts
@@ -1126,12 +1126,12 @@ def main():
 
     mode_label = "📝 PAPER" if PAPER_MODE else "🔴 LIVE"
     log.info("=" * 60)
-    log.info(f"BTC Intraday Signal Bot v2 — {mode_label}")
+    log.info(f"WRAITH — {mode_label}")
     log.info(f"Symbols: {', '.join(SYMBOLS)}")
     log.info("=" * 60)
 
     send_telegram(
-        f"🤖 <b>BTC Signal Bot v2 Online</b>\n"
+        f"🪦 <b>WRAITH Online</b>\n"
         f"Mode: {mode_label}\n"
         f"Watching: {', '.join(SYMBOLS)}\n"
         f"{'⚡ Ready to trade!' if not PAPER_MODE else '📝 Paper mode — no real orders'}"
