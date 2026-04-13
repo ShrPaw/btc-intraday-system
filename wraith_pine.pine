@@ -263,7 +263,7 @@ if takeTrade and showLabels
         labelText += "\n4H RSI: " + str.tostring(h4_rsi, "#.#")
     y_pos = direction == 1 ? low * 0.995 : high * 1.005
     lbl_style = direction == 1 ? label.style_label_up : label.style_label_down
-    label.new(bar_index, y_pos, labelText, color=color.new(dirColor, 65), textcolor=color.white, style=lbl_style, size=size.large)
+    label.new(bar_index, y_pos, labelText, color=color.new(dirColor, 50), textcolor=color.white, style=lbl_style, size=size.huge)
 
 var line tp1Line = na
 var line tp2Line = na
@@ -276,15 +276,15 @@ if takeTrade and showTPSL
     line.delete(tp3Line)
     line.delete(slLine)
     if direction == 1
-        tp1Line := line.new(bar_index, tp1Long, bar_index + 50, tp1Long, color=color.new(#00ff88, 30), style=line.style_dashed, width=2)
-        tp2Line := line.new(bar_index, tp2Long, bar_index + 50, tp2Long, color=color.new(#00cc66, 30), style=line.style_dashed, width=2)
-        tp3Line := line.new(bar_index, tp3Long, bar_index + 50, tp3Long, color=color.new(#009944, 30), style=line.style_dashed, width=2)
-        slLine := line.new(bar_index, slLong, bar_index + 50, slLong, color=color.new(#ff2244, 30), style=line.style_dotted, width=2)
+        tp1Line := line.new(bar_index, tp1Long, bar_index + 50, tp1Long, color=color.new(#00ff88, 10), style=line.style_dashed, width=3)
+        tp2Line := line.new(bar_index, tp2Long, bar_index + 50, tp2Long, color=color.new(#00cc66, 10), style=line.style_dashed, width=3)
+        tp3Line := line.new(bar_index, tp3Long, bar_index + 50, tp3Long, color=color.new(#009944, 10), style=line.style_dashed, width=3)
+        slLine := line.new(bar_index, slLong, bar_index + 50, slLong, color=color.new(#ff2244, 10), style=line.style_dotted, width=3)
     else
-        tp1Line := line.new(bar_index, tp1Short, bar_index + 50, tp1Short, color=color.new(#00ff88, 30), style=line.style_dashed, width=2)
-        tp2Line := line.new(bar_index, tp2Short, bar_index + 50, tp2Short, color=color.new(#00cc66, 30), style=line.style_dashed, width=2)
-        tp3Line := line.new(bar_index, tp3Short, bar_index + 50, tp3Short, color=color.new(#009944, 30), style=line.style_dashed, width=2)
-        slLine := line.new(bar_index, slShort, bar_index + 50, slShort, color=color.new(#ff2244, 30), style=line.style_dotted, width=2)
+        tp1Line := line.new(bar_index, tp1Short, bar_index + 50, tp1Short, color=color.new(#00ff88, 10), style=line.style_dashed, width=3)
+        tp2Line := line.new(bar_index, tp2Short, bar_index + 50, tp2Short, color=color.new(#00cc66, 10), style=line.style_dashed, width=3)
+        tp3Line := line.new(bar_index, tp3Short, bar_index + 50, tp3Short, color=color.new(#009944, 10), style=line.style_dashed, width=3)
+        slLine := line.new(bar_index, slShort, bar_index + 50, slShort, color=color.new(#ff2244, 10), style=line.style_dotted, width=3)
 
 barcolor(takeTrade ? (direction == 1 ? colorLong : colorShort) : na)
 bgcolor(takeTrade ? (direction == 1 ? color.new(colorLong, 85) : color.new(colorShort, 85)) : na)
@@ -294,42 +294,42 @@ bgcolor(takeTrade ? (direction == 1 ? color.new(colorLong, 85) : color.new(color
 // =========================================================
 
 if showDashboard and barstate.islast
-    var table dash = table.new(position.top_right, 2, 12, bgcolor=color.new(#0d0d0d, 0), border_width=2, border_color=color.new(#444444, 30), frame_width=2, frame_color=color.new(#333333, 30))
-    lblClr = color.new(#aaaaaa, 0)
+    var table dash = table.new(position.top_right, 2, 12, bgcolor=color.new(#000000, 0), border_width=3, border_color=color.new(#555555, 20), frame_width=3, frame_color=color.new(#444444, 20))
+    lblClr = color.new(#cccccc, 0)
     valClr = color.new(#ffffff, 0)
     dirClr = direction == 1 ? colorLong : direction == -1 ? colorShort : colorNeutral
     confBarClr = confidenceAdj >= highThresh ? colorLong : confidenceAdj >= premiumThresh ? color.new(#ffcc00, 0) : confidenceAdj >= mildThresh ? color.new(#ff9900, 0) : colorShort
-    table.cell(dash, 0, 0, "🪦 WRAITH", text_color=colorLong, text_size=size.normal, bgcolor=color.new(#161616, 0))
-    table.cell(dash, 1, 0, str.tostring(confidenceAdj, "#.##%"), text_color=confBarClr, text_size=size.normal, bgcolor=color.new(#161616, 0))
-    table.cell(dash, 0, 1, "Setup", text_color=lblClr, text_size=size.small)
-    table.cell(dash, 1, 1, setupType, text_color=dirClr, text_size=size.small)
-    table.cell(dash, 0, 2, "Direction", text_color=lblClr, text_size=size.small)
-    table.cell(dash, 1, 2, direction == 1 ? "🟢 LONG" : direction == -1 ? "🔴 SHORT" : "—", text_color=dirClr, text_size=size.small)
-    table.cell(dash, 0, 3, "Confidence", text_color=lblClr, text_size=size.small)
-    table.cell(dash, 1, 3, str.tostring(confidenceAdj, "#.##%"), text_color=confBarClr, text_size=size.small)
-    table.cell(dash, 0, 4, "Tier", text_color=lblClr, text_size=size.small)
-    table.cell(dash, 1, 4, confMode, text_color=dirClr, text_size=size.small)
-    table.cell(dash, 0, 5, "4H RSI", text_color=lblClr, text_size=size.small)
-    table.cell(dash, 1, 5, str.tostring(h4_rsi, "#.#"), text_color=valClr, text_size=size.small)
-    table.cell(dash, 0, 6, "15M RSI", text_color=lblClr, text_size=size.small)
-    table.cell(dash, 1, 6, str.tostring(m15_rsi, "#.#"), text_color=valClr, text_size=size.small)
-    table.cell(dash, 0, 7, "ADX", text_color=lblClr, text_size=size.small)
+    table.cell(dash, 0, 0, "🪦 WRAITH", text_color=colorLong, text_size=size.huge, bgcolor=color.new(#1a1a1a, 0))
+    table.cell(dash, 1, 0, str.tostring(confidenceAdj, "#.##%"), text_color=confBarClr, text_size=size.huge, bgcolor=color.new(#1a1a1a, 0))
+    table.cell(dash, 0, 1, "Setup", text_color=lblClr, text_size=size.large)
+    table.cell(dash, 1, 1, setupType, text_color=dirClr, text_size=size.large)
+    table.cell(dash, 0, 2, "Direction", text_color=lblClr, text_size=size.large)
+    table.cell(dash, 1, 2, direction == 1 ? "🟢 LONG" : direction == -1 ? "🔴 SHORT" : "—", text_color=dirClr, text_size=size.large)
+    table.cell(dash, 0, 3, "Confidence", text_color=lblClr, text_size=size.large)
+    table.cell(dash, 1, 3, str.tostring(confidenceAdj, "#.##%"), text_color=confBarClr, text_size=size.large)
+    table.cell(dash, 0, 4, "Tier", text_color=lblClr, text_size=size.large)
+    table.cell(dash, 1, 4, confMode, text_color=dirClr, text_size=size.large)
+    table.cell(dash, 0, 5, "4H RSI", text_color=lblClr, text_size=size.large)
+    table.cell(dash, 1, 5, str.tostring(h4_rsi, "#.#"), text_color=valClr, text_size=size.large)
+    table.cell(dash, 0, 6, "15M RSI", text_color=lblClr, text_size=size.large)
+    table.cell(dash, 1, 6, str.tostring(m15_rsi, "#.#"), text_color=valClr, text_size=size.large)
+    table.cell(dash, 0, 7, "ADX", text_color=lblClr, text_size=size.large)
     adxClr = adx >= adxTrending ? colorLong : adx < adxChoppy ? colorShort : colorNeutral
-    table.cell(dash, 1, 7, str.tostring(adx, "#.#"), text_color=adxClr, text_size=size.small)
-    table.cell(dash, 0, 8, "Structure", text_color=lblClr, text_size=size.small)
-    table.cell(dash, 1, 8, triggerOk ? "✅" : "❌", text_color=triggerOk ? colorLong : colorShort, text_size=size.small)
-    table.cell(dash, 0, 9, "Stage", text_color=lblClr, text_size=size.small)
-    table.cell(dash, 1, 9, str.tostring(stage), text_color=valClr, text_size=size.small)
+    table.cell(dash, 1, 7, str.tostring(adx, "#.#"), text_color=adxClr, text_size=size.large)
+    table.cell(dash, 0, 8, "Structure", text_color=lblClr, text_size=size.large)
+    table.cell(dash, 1, 8, triggerOk ? "✅" : "❌", text_color=triggerOk ? colorLong : colorShort, text_size=size.large)
+    table.cell(dash, 0, 9, "Stage", text_color=lblClr, text_size=size.large)
+    table.cell(dash, 1, 9, str.tostring(stage), text_color=valClr, text_size=size.large)
     if direction != 0
-        table.cell(dash, 0, 10, "TP1", text_color=color.new(#00ff88, 0), text_size=size.small)
-        table.cell(dash, 1, 10, direction == 1 ? str.tostring(tp1Long, "#.####") : str.tostring(tp1Short, "#.####"), text_color=color.new(#00ff88, 0), text_size=size.small)
-        table.cell(dash, 0, 11, "SL", text_color=color.new(#ff2244, 0), text_size=size.small)
-        table.cell(dash, 1, 11, direction == 1 ? str.tostring(slLong, "#.####") : str.tostring(slShort, "#.####"), text_color=color.new(#ff2244, 0), text_size=size.small)
+        table.cell(dash, 0, 10, "TP1", text_color=color.new(#00ff88, 0), text_size=size.large)
+        table.cell(dash, 1, 10, direction == 1 ? str.tostring(tp1Long, "#.####") : str.tostring(tp1Short, "#.####"), text_color=color.new(#00ff88, 0), text_size=size.large)
+        table.cell(dash, 0, 11, "SL", text_color=color.new(#ff2244, 0), text_size=size.large)
+        table.cell(dash, 1, 11, direction == 1 ? str.tostring(slLong, "#.####") : str.tostring(slShort, "#.####"), text_color=color.new(#ff2244, 0), text_size=size.large)
     else
-        table.cell(dash, 0, 10, "Signal", text_color=lblClr, text_size=size.small)
-        table.cell(dash, 1, 10, takeTrade ? "⚡ ACTIVE" : "Waiting...", text_color=takeTrade ? colorLong : colorNeutral, text_size=size.small)
-        table.cell(dash, 0, 11, "", text_color=lblClr, text_size=size.small)
-        table.cell(dash, 1, 11, "", text_color=lblClr, text_size=size.small)
+        table.cell(dash, 0, 10, "Signal", text_color=lblClr, text_size=size.large)
+        table.cell(dash, 1, 10, takeTrade ? "⚡ ACTIVE" : "Waiting...", text_color=takeTrade ? colorLong : colorNeutral, text_size=size.large)
+        table.cell(dash, 0, 11, "", text_color=lblClr, text_size=size.large)
+        table.cell(dash, 1, 11, "", text_color=lblClr, text_size=size.large)
 
 // =========================================================
 // ALERTS
