@@ -1,0 +1,449 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// WRAITH — Intraday Confidence-Based Trading System
+// Port of the Python backtester logic to Pine Script v5
+
+//@version=5
+indicator("WRAITH — Intraday Signal System", "WRAITH", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// =========================================================
+// INPUTS
+// =========================================================
+
+// RSI
+rsiLen = input.int(14, "RSI Period", group="RSI Settings")
+
+// Timeframes (request.security for higher TF data)
+tf_15m  = input.timeframe("15", "15M Timeframe", group="Timeframes")
+tf_30m  = input.timeframe("30", "30M Timeframe", group="Timeframes")
+tf_4h   = input.timeframe("240", "4H Timeframe", group="Timeframes")
+tf_6h   = input.timeframe("360", "6H Timeframe", group="Timeframes")
+tf_12h  = input.timeframe("720", "12H Timeframe", group="Timeframes")
+
+// EMA
+emaLen  = input.int(20, "EMA Period", group="EMA Settings")
+ema50Len = input.int(50, "EMA 50 Period", group="EMA Settings")
+
+// Confidence thresholds
+noTradeThresh   = input.float(0.72, "NO_TRADE Threshold", step=0.01, group="Confidence")
+mildThresh      = input.float(0.78, "MILD Threshold", step=0.01, group="Confidence")
+premiumThresh   = input.float(0.80, "PREMIUM Threshold", step=0.01, group="Confidence")
+highThresh      = input.float(0.82, "HIGH Threshold", step=0.01, group="Confidence")
+eliteThresh     = input.float(0.88, "ELITE Threshold", step=0.01, group="Confidence")
+
+// ADX
+adxLen          = input.int(14, "ADX Period", group="ADX")
+adxTrending     = input.float(25.0, "ADX Trending (bonus)", group="ADX")
+adxChoppy       = input.float(15.0, "ADX Choppy (penalty)", group="ADX")
+enableAdx       = input.bool(true, "Enable ADX Filter", group="ADX")
+
+// Visuals
+showLabels      = input.bool(true, "Show Signal Labels", group="Visuals")
+showConfidence  = input.bool(true, "Show Confidence %", group="Visuals")
+showTPSL        = input.bool(true, "Show TP/SL Lines", group="Visuals")
+showDashboard   = input.bool(true, "Show Dashboard", group="Visuals")
+
+// Colors
+colorLong       = input.color(#00ff88, "Long Color", group="Colors")
+colorShort      = input.color(#ff2244, "Short Color", group="Colors")
+colorNeutral    = input.color(#888888, "Neutral Color", group="Colors")
+
+// TP percentages
+tp1Pct = input.float(0.5, "TP1 %", step=0.1, group="Take Profits") / 100
+tp2PctScalp = input.float(0.7, "TP2 % (Scalp)", step=0.1, group="Take Profits") / 100
+tp2PctTrend = input.float(0.6, "TP2 % (Trend)", step=0.1, group="Take Profits") / 100
+tp3Pct = input.float(0.8, "TP3 %", step=0.1, group="Take Profits") / 100
+slLookback = input.int(4, "Stop Loss Lookback (bars)", group="Take Profits")
+slMinFloor = input.float(0.4, "Min Stop Floor %", step=0.1, group="Take Profits") / 100
+
+// =========================================================
+// RSI CALCULATION (Current TF — 5M)
+// =========================================================
+
+rsi_5m = ta.rsi(close, rsiLen)
+
+// RSI slope
+rsi_slope_1 = rsi_5m - rsi_5m[1]
+rsi_slope_2 = rsi_5m - rsi_5m[2]
+
+// RSI cross detection
+cross_up_50 = (rsi_5m[1] <= 50) and (rsi_5m > 50)
+cross_dn_50 = (rsi_5m[1] >= 50) and (rsi_5m < 50)
+
+// Bars since last cross
+var int lastCrossIdx = na
+var int lastCrossDir = 0
+
+if cross_up_50
+    lastCrossIdx := bar_index
+    lastCrossDir := 1
+if cross_dn_50
+    lastCrossIdx := bar_index
+    lastCrossDir := -1
+
+barsSinceCross = not na(lastCrossIdx) ? bar_index - lastCrossIdx : 999
+fresh_long = (lastCrossDir == 1) and (barsSinceCross <= 4)
+fresh_short = (lastCrossDir == -1) and (barsSinceCross <= 4)
+
+// =========================================================
+// EMA + BOS (Current TF)
+// =========================================================
+
+ema20 = ta.ema(close, emaLen)
+ema50 = ta.ema(close, ema50Len)
+emaDistPct = (close - ema20) / ema20
+
+// EMA reclaim
+emaReclaimLong = (close[1] <= ema20[1]) and (close > ema20)
+emaReclaimShort = (close[1] >= ema20[1]) and (close < ema20)
+
+// BOS (Break of Structure)
+lookback = 12
+prevSwingHigh = ta.highest(high, lookback)[1]
+prevSwingLow = ta.lowest(low, lookback)[1]
+bosLong = high > prevSwingHigh
+bosShort = low < prevSwingLow
+
+// Structure trigger (EMA reclaim + BOS within 3-bar window)
+structTriggerLong = (ta.max(emaReclaimLong ? 1 : 0, 3) > 0) and (ta.max(bosLong ? 1 : 0, 3) > 0)
+structTriggerShort = (ta.max(emaReclaimShort ? 1 : 0, 3) > 0) and (ta.max(bosShort ? 1 : 0, 3) > 0)
+
+// Simplified rolling structure check
+var int barsSinceEmaLong = 999
+var int barsSinceBosLong = 999
+var int barsSinceEmaShort = 999
+var int barsSinceBosShort = 999
+
+if emaReclaimLong
+    barsSinceEmaLong := 0
+else
+    barsSinceEmaLong += 1
+
+if bosLong
+    barsSinceBosLong := 0
+else
+    barsSinceBosLong += 1
+
+if emaReclaimShort
+    barsSinceEmaShort := 0
+else
+    barsSinceEmaShort += 1
+
+if bosShort
+    barsSinceBosShort := 0
+else
+    barsSinceBosShort += 1
+
+structOkLong = (barsSinceEmaLong <= 3) and (barsSinceBosLong <= 3)
+structOkShort = (barsSinceEmaShort <= 3) and (barsSinceBosShort <= 3)
+
+// =========================================================
+// EXTRA FEATURES
+// =========================================================
+
+ret_3 = (close - close[3]) / close[3]
+rv_6 = ta.stdev(ta.change(close, 1), 6)
+
+// =========================================================
+// HIGHER TIMEFRAME RSI (request.security)
+// =========================================================
+
+getRSI(tf) =>
+    request.security(syminfo.tickerid, tf, ta.rsi(close, rsiLen), barmerge.gaps_off, barmerge.lookahead_off)
+
+getRSISlope(tf) =>
+    rsi_htf = request.security(syminfo.tickerid, tf, ta.rsi(close, rsiLen), barmerge.gaps_off, barmerge.lookahead_off)
+    rsi_htf - rsi_htf[1]
+
+// 15M
+m15_rsi = getRSI(tf_15m)
+m15_slope = getRSISlope(tf_15m)
+
+// 30M
+m30_rsi = getRSI(tf_30m)
+
+// 4H
+h4_rsi = getRSI(tf_4h)
+h4_slope_1 = getRSISlope(tf_4h)
+h4_slope_2_rsi = request.security(syminfo.tickerid, tf_4h, ta.rsi(close, rsiLen), barmerge.gaps_off, barmerge.lookahead_off)
+h4_slope_2 = h4_slope_2_rsi - h4_slope_2_rsi[2]
+
+// 4H fresh cross detection
+h4_rsi_prev = h4_rsi[1]
+h4_cross_up = (h4_rsi_prev <= 50) and (h4_rsi > 50)
+h4_cross_dn = (h4_rsi_prev >= 50) and (h4_rsi < 50)
+
+var int h4LastCrossIdx = na
+var int h4LastCrossDir = 0
+
+if h4_cross_up
+    h4LastCrossIdx := bar_index
+    h4LastCrossDir := 1
+if h4_cross_dn
+    h4LastCrossIdx := bar_index
+    h4LastCrossDir := -1
+
+h4BarsSinceCross = not na(h4LastCrossIdx) ? bar_index - h4LastCrossIdx : 999
+h4_fresh_long = (h4LastCrossDir == 1) and (h4BarsSinceCross <= 4)
+h4_fresh_short = (h4LastCrossDir == -1) and (h4BarsSinceCross <= 4)
+
+// 6H
+h6_rsi = getRSI(tf_6h)
+
+// 12H
+h12_rsi = getRSI(tf_12h)
+
+// =========================================================
+// ADX CALCULATION (Current TF for Pine, approximated)
+// =========================================================
+
+[diplus, diminus, adx] = ta.dmi(adxLen, adxLen)
+
+// =========================================================
+// SETUP ENGINE
+// =========================================================
+
+// RSI_SCALP
+scalpLongCtx = h4_fresh_long and (m15_rsi > 50) and (m15_rsi[1] > 50) and (h6_rsi > 50) and (h12_rsi > 50)
+scalpShortCtx = h4_fresh_short and (m15_rsi < 50) and (m15_rsi[1] < 50) and (h6_rsi < 50) and (h12_rsi < 50)
+
+// RSI_TREND
+trendLongCtx = (h4_rsi > 55) and (h4_slope_1 > 0) and (h4_slope_2 > 0) and (m15_rsi > 55) and (m15_slope >= 0) and (h12_rsi > 50)
+trendShortCtx = (h4_rsi < 45) and (h4_slope_1 < 0) and (h4_slope_2 < 0) and (m15_rsi < 45) and (m15_slope <= 0) and (h12_rsi < 50)
+
+// Setup type
+setupType = scalpLongCtx or scalpShortCtx ? "RSI_SCALP" : trendLongCtx or trendShortCtx ? "RSI_TREND" : "none"
+direction = scalpLongCtx or trendLongCtx ? 1 : scalpShortCtx or trendShortCtx ? -1 : 0
+
+// Stage (scalp only)
+stage = setupType == "RSI_SCALP" ? (h4BarsSinceCross <= 1 ? 1 : h4BarsSinceCross <= 3 ? 2 : 3) : 0
+
+// Structure gate
+triggerOk = direction == 1 ? structOkLong : direction == -1 ? structOkShort : false
+
+// =========================================================
+// CONFIDENCE ENGINE
+// =========================================================
+
+// HTF Alignment
+h4AlignLong = h4_rsi > 50 ? 1.0 : 0.0
+h6AlignLong = h6_rsi > 50 ? 1.0 : 0.0
+h12AlignLong = h12_rsi > 50 ? 1.0 : 0.0
+alignLong = 0.4 * h4AlignLong + 0.3 * h6AlignLong + 0.3 * h12AlignLong
+
+h4AlignShort = h4_rsi < 50 ? 1.0 : 0.0
+h6AlignShort = h6_rsi < 50 ? 1.0 : 0.0
+h12AlignShort = h12_rsi < 50 ? 1.0 : 0.0
+alignShort = 0.4 * h4AlignShort + 0.3 * h6AlignShort + 0.3 * h12AlignShort
+
+alignment = direction == 1 ? alignLong : direction == -1 ? alignShort : 0.0
+
+// Freshness
+freshBase = math.max(1.0 - (h4BarsSinceCross / 4.0), 0.0)
+
+// Momentum (simplified bounded score)
+boundedScore(s, q) =>
+    ref = ta.percentile_nearest_rank(math.abs(s), 200, 80)
+    ref > 0 ? math.min(math.abs(s) / ref, 1.0) : 0.0
+
+h4SlopeScore = boundedScore(h4_slope_1, 0.8)
+m15SlopeScore = boundedScore(m15_slope, 0.8)
+retScore = boundedScore(ret_3, 0.8)
+momentumScore = math.max(0, math.min(0.4 * h4SlopeScore + 0.4 * m15SlopeScore + 0.2 * retScore, 1.0))
+
+// Structure score
+emaDistRef = math.max(math.abs(emaDistPct), 0.001)
+emaDistQuality = math.max(0, math.min(1.0 - (math.abs(emaDistPct) / emaDistRef), 1.0))
+
+structLong = math.max(0, math.min(0.4 * (emaReclaimLong ? 1.0 : 0.0) + 0.4 * (bosLong ? 1.0 : 0.0) + 0.2 * emaDistQuality, 1.0))
+structShort = math.max(0, math.min(0.4 * (emaReclaimShort ? 1.0 : 0.0) + 0.4 * (bosShort ? 1.0 : 0.0) + 0.2 * emaDistQuality, 1.0))
+structScore = direction == 1 ? structLong : direction == -1 ? structShort : 0.0
+
+// Volatility rank (simplified)
+rvScore = math.min(rv_6 / (ta.highest(rv_6, 200) + 0.0001), 1.0)
+
+// CFX (30M alignment)
+cfxLong = m30_rsi > 50 ? 1.0 : 0.0
+cfxShort = m30_rsi < 50 ? 1.0 : 0.0
+cfxAlign = direction == 1 ? cfxLong : direction == -1 ? cfxShort : 0.0
+
+// Raw confidence by strategy
+scalpConf = 0.30 * alignment + 0.25 * freshBase + 0.20 * momentumScore + 0.15 * rvScore + 0.10 * structScore
+trendConf = 0.25 * alignment + 0.20 * momentumScore + 0.30 * structScore + 0.15 * rvScore + 0.10 * cfxAlign
+
+confidenceRaw = setupType == "RSI_SCALP" ? scalpConf : setupType == "RSI_TREND" ? trendConf : 0.0
+
+// ADX modifier
+adxMod = 0.0
+if enableAdx
+    adxMod := adx >= adxTrending ? 0.03 : adx < adxChoppy ? -0.03 : 0.0
+
+confidenceAdj = math.max(0, math.min(confidenceRaw + adxMod, 1.0))
+
+// Elite gate
+eliteGate = (freshBase >= 0.8) and (momentumScore >= 0.7) and (structScore >= 0.85) and (rvScore >= 0.55) and (emaDistQuality >= 0.55)
+
+// Tier assignment
+confMode = confidenceAdj < noTradeThresh ? "NO_TRADE" :
+           confidenceAdj < mildThresh ? "MILD" :
+           confidenceAdj < premiumThresh ? "MID" :
+           confidenceAdj < highThresh ? "PREMIUM" :
+           confidenceAdj < eliteThresh ? "HIGH" :
+           eliteGate ? "ELITE" : "HIGH"
+
+// Trade decision
+allowedModes = confMode == "MILD" or confMode == "PREMIUM" or confMode == "HIGH" or confMode == "ELITE"
+volThresh = ta.percentile_nearest_rank(volume, 500, 30)
+volumeOk = volume >= volThresh
+takeTrade = (setupType != "none") and triggerOk and (confMode != "NO_TRADE") and allowedModes and volumeOk and (direction != 0)
+
+// =========================================================
+// TP/SL CALCULATION
+// =========================================================
+
+slLookbackLow = ta.lowest(low, slLookback)
+slLookbackHigh = ta.highest(high, slLookback)
+
+slDistLong = math.max((close - slLookbackLow) / close, slMinFloor)
+slDistShort = math.max((slLookbackHigh - close) / close, slMinFloor)
+
+tp2Pct = setupType == "RSI_TREND" ? tp2PctTrend : tp2PctScalp
+
+tp1Long = close * (1 + tp1Pct)
+tp2Long = close * (1 + tp2Pct)
+tp3Long = close * (1 + tp3Pct)
+slLong = close * (1 - slDistLong)
+
+tp1Short = close * (1 - tp1Pct)
+tp2Short = close * (1 - tp2Pct)
+tp3Short = close * (1 - tp3Pct)
+slShort = close * (1 + slDistShort)
+
+// =========================================================
+// VISUALS
+// =========================================================
+
+// EMA plots
+plot(ema20, "EMA 20", color=color.new(colorYellow, 30), linewidth=1)
+plot(ema50, "EMA 50", color=color.new(colorOrange, 30), linewidth=1)
+
+// Signal labels
+if takeTrade and showLabels
+    dirLabel = direction == 1 ? "LONG" : "SHORT"
+    dirColor = direction == 1 ? colorLong : colorShort
+    emoji = direction == 1 ? "🟢" : "🔴"
+    
+    labelText = emoji + " " + dirLabel + "\n" + setupType + "\n" + confMode + " " + str.tostring(confidenceAdj, "#.#%")
+    if showConfidence
+        labelText += "\n4H RSI: " + str.tostring(h4_rsi, "#.#")
+    
+    label.new(
+         bar_index, 
+         direction == 1 ? low * 0.998 : high * 1.002, 
+         labelText, 
+         color=color.new(dirColor, 80), 
+         textcolor=dirColor,
+         style=direction == 1 ? label.style_label_up : label.style_label_down,
+         size=size.small
+    )
+
+// TP/SL lines (for latest signal only)
+var line tp1Line = na
+var line tp2Line = na
+var line tp3Line = na
+var line slLine = na
+
+if takeTrade and showTPSL
+    // Delete old lines
+    line.delete(tp1Line)
+    line.delete(tp2Line)
+    line.delete(tp3Line)
+    line.delete(slLine)
+    
+    dirColor = direction == 1 ? colorLong : colorShort
+    
+    if direction == 1
+        tp1Line := line.new(bar_index, tp1Long, bar_index + 50, tp1Long, color=color.new(#00ff88, 50), style=line.style_dashed, width=1)
+        tp2Line := line.new(bar_index, tp2Long, bar_index + 50, tp2Long, color=color.new(#00cc66, 50), style=line.style_dashed, width=1)
+        tp3Line := line.new(bar_index, tp3Long, bar_index + 50, tp3Long, color=color.new(#009944, 50), style=line.style_dashed, width=1)
+        slLine := line.new(bar_index, slLong, bar_index + 50, slLong, color=color.new(#ff2244, 50), style=line.style_dotted, width=1)
+    else
+        tp1Line := line.new(bar_index, tp1Short, bar_index + 50, tp1Short, color=color.new(#00ff88, 50), style=line.style_dashed, width=1)
+        tp2Line := line.new(bar_index, tp2Short, bar_index + 50, tp2Short, color=color.new(#00cc66, 50), style=line.style_dashed, width=1)
+        tp3Line := line.new(bar_index, tp3Short, bar_index + 50, tp3Short, color=color.new(#009944, 50), style=line.style_dashed, width=1)
+        slLine := line.new(bar_index, slShort, bar_index + 50, slShort, color=color.new(#ff2244, 50), style=line.style_dotted, width=1)
+
+// Bar coloring
+barcolor(takeTrade ? (direction == 1 ? colorLong : colorShort) : na)
+
+// Background glow on signals
+bgcolor(takeTrade ? (direction == 1 ? color.new(colorLong, 92) : color.new(colorShort, 92)) : na)
+
+// =========================================================
+// DASHBOARD TABLE
+// =========================================================
+
+if showDashboard and barstate.islast
+    var table dash = table.new(position.top_right, 2, 12, 
+         bgcolor=color.new(#0a0a0a, 10), 
+         border_width=1, 
+         border_color=color.new(#333333, 50),
+         frame_width=1,
+         frame_color=color.new(#222222, 50))
+    
+    headerColor = color.new(#00ff88, 20)
+    labelColor = color.new(#888888, 0)
+    valueColor = color.new(#ffffff, 0)
+    dirColor = direction == 1 ? colorLong : direction == -1 ? colorShort : colorNeutral
+    
+    table.cell(dash, 0, 0, "🪦 WRAITH", text_color=colorLong, text_size=size.small, bgcolor=color.new(#111111, 0))
+    table.cell(dash, 1, 0, "", bgcolor=color.new(#111111, 0))
+    
+    table.cell(dash, 0, 1, "Setup", text_color=labelColor, text_size=size.tiny)
+    table.cell(dash, 1, 1, setupType, text_color=dirColor, text_size=size.tiny)
+    
+    table.cell(dash, 0, 2, "Direction", text_color=labelColor, text_size=size.tiny)
+    table.cell(dash, 1, 2, direction == 1 ? "🟢 LONG" : direction == -1 ? "🔴 SHORT" : "—", text_color=dirColor, text_size=size.tiny)
+    
+    table.cell(dash, 0, 3, "Confidence", text_color=labelColor, text_size=size.tiny)
+    table.cell(dash, 1, 3, str.tostring(confidenceAdj, "#.##%"), text_color=dirColor, text_size=size.tiny)
+    
+    table.cell(dash, 0, 4, "Tier", text_color=labelColor, text_size=size.tiny)
+    table.cell(dash, 1, 4, confMode, text_color=dirColor, text_size=size.tiny)
+    
+    table.cell(dash, 0, 5, "4H RSI", text_color=labelColor, text_size=size.tiny)
+    table.cell(dash, 1, 5, str.tostring(h4_rsi, "#.#"), text_color=valueColor, text_size=size.tiny)
+    
+    table.cell(dash, 0, 6, "15M RSI", text_color=labelColor, text_size=size.tiny)
+    table.cell(dash, 1, 6, str.tostring(m15_rsi, "#.#"), text_color=valueColor, text_size=size.tiny)
+    
+    table.cell(dash, 0, 7, "ADX", text_color=labelColor, text_size=size.tiny)
+    adxColor = adx >= adxTrending ? colorLong : adx < adxChoppy ? colorShort : colorNeutral
+    table.cell(dash, 1, 7, str.tostring(adx, "#.#"), text_color=adxColor, text_size=size.tiny)
+    
+    table.cell(dash, 0, 8, "Structure", text_color=labelColor, text_size=size.tiny)
+    table.cell(dash, 1, 8, triggerOk ? "✅" : "❌", text_color=triggerOk ? colorLong : colorShort, text_size=size.tiny)
+    
+    table.cell(dash, 0, 9, "Stage", text_color=labelColor, text_size=size.tiny)
+    table.cell(dash, 1, 9, str.tostring(stage), text_color=valueColor, text_size=size.tiny)
+    
+    // TP/SL info
+    if direction != 0
+        table.cell(dash, 0, 10, "TP1", text_color=color.new(#00ff88, 20), text_size=size.tiny)
+        table.cell(dash, 1, 10, direction == 1 ? str.tostring(tp1Long, "#.####") : str.tostring(tp1Short, "#.####"), text_color=color.new(#00ff88, 20), text_size=size.tiny)
+        
+        table.cell(dash, 0, 11, "SL", text_color=color.new(#ff2244, 20), text_size=size.tiny)
+        table.cell(dash, 1, 11, direction == 1 ? str.tostring(slLong, "#.####") : str.tostring(slShort, "#.####"), text_color=color.new(#ff2244, 20), text_size=size.tiny)
+    else
+        table.cell(dash, 0, 10, "Signal", text_color=labelColor, text_size=size.tiny)
+        table.cell(dash, 1, 10, takeTrade ? "⚡ ACTIVE" : "Waiting...", text_color=takeTrade ? colorLong : colorNeutral, text_size=size.tiny)
+        
+        table.cell(dash, 0, 11, "", text_color=labelColor, text_size=size.tiny)
+        table.cell(dash, 1, 11, "", text_color=labelColor, text_size=size.tiny)
+
+// =========================================================
+// ALERTS
+// =========================================================
+
+alertcondition(takeTrade and direction == 1, "WRAITH LONG Signal", "🟢 WRAITH LONG — {{ticker}} {{interval}} | Conf: {{plot_0}}%")
+alertcondition(takeTrade and direction == -1, "WRAITH SHORT Signal", "🔴 WRAITH SHORT — {{ticker}} {{interval}} | Conf: {{plot_0}}%")
+alertcondition(takeTrade, "WRAITH Any Signal", "🪦 WRAITH Signal — {{ticker}} {{interval}}")
