@@ -1,51 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- Deep dark background -->
-    <radialGradient id="bg" cx="50%" cy="35%" r="70%">
-      <stop offset="0%" stop-color="#1a0520"/>
-      <stop offset="40%" stop-color="#0a0210"/>
-      <stop offset="100%" stop-color="#020105"/>
+    <!-- Deep void background -->
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#0a1a0a"/>
+      <stop offset="40%" stop-color="#040d04"/>
+      <stop offset="100%" stop-color="#010301"/>
     </radialGradient>
     
-    <!-- Fiery eye glow -->
-    <radialGradient id="fireEye" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#ff2200"/>
-      <stop offset="30%" stop-color="#ff4400" stop-opacity="0.9"/>
-      <stop offset="60%" stop-color="#ff2200" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#ff0000" stop-opacity="0"/>
+    <!-- Lich green fire eye -->
+    <radialGradient id="greenFire" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#aaff00"/>
+      <stop offset="20%" stop-color="#66ff00"/>
+      <stop offset="50%" stop-color="#22aa00" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#004400" stop-opacity="0"/>
     </radialGradient>
     
-    <!-- Inner eye core -->
+    <!-- Green eye core -->
     <radialGradient id="eyeCore" cx="50%" cy="40%" r="50%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="30%" stop-color="#ffaa00"/>
-      <stop offset="70%" stop-color="#ff4400"/>
-      <stop offset="100%" stop-color="#880000"/>
+      <stop offset="0%" stop-color="#eeffcc"/>
+      <stop offset="25%" stop-color="#aaff00"/>
+      <stop offset="60%" stop-color="#44cc00"/>
+      <stop offset="100%" stop-color="#115500"/>
     </radialGradient>
     
-    <!-- Face gradient for 3D depth -->
-    <radialGradient id="face" cx="50%" cy="45%" r="45%">
-      <stop offset="0%" stop-color="#2a1a1a"/>
-      <stop offset="50%" stop-color="#1a0e0e"/>
-      <stop offset="100%" stop-color="#0a0505"/>
+    <!-- Skull face - pale/dead -->
+    <radialGradient id="skullFace" cx="50%" cy="45%" r="48%">
+      <stop offset="0%" stop-color="#3a3a2a"/>
+      <stop offset="40%" stop-color="#252518"/>
+      <stop offset="100%" stop-color="#10100a"/>
     </radialGradient>
     
-    <!-- Bone/skull highlight -->
-    <linearGradient id="boneHighlight" x1="0.3" y1="0" x2="0.7" y2="1">
-      <stop offset="0%" stop-color="#4a3030" stop-opacity="0.6"/>
-      <stop offset="50%" stop-color="#2a1515" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#0a0505" stop-opacity="0"/>
+    <!-- Bone highlight -->
+    <linearGradient id="boneHL" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#5a5a40" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#15150a" stop-opacity="0"/>
     </linearGradient>
-    
-    <!-- Smoke/mist -->
-    <radialGradient id="smoke" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#1a0020" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#050008" stop-opacity="0"/>
-    </radialGradient>
     
     <!-- Filters -->
     <filter id="heavyBlur" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="12"/>
+      <feGaussianBlur stdDeviation="15"/>
     </filter>
     <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="8"/>
@@ -55,19 +48,6 @@
     </filter>
     <filter id="tinyBlur" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="1.5"/>
-    </filter>
-    
-    <!-- 3D shadow filter -->
-    <filter id="innerShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="blur"/>
-      <feOffset dx="2" dy="4"/>
-      <feComposite in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1"/>
-      <feFlood flood-color="#000000" flood-opacity="0.8"/>
-      <feComposite in2="SourceGraphic" operator="in"/>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
     </filter>
     
     <clipPath id="circle">
@@ -80,232 +60,212 @@
     <!-- Background -->
     <rect width="512" height="512" fill="url(#bg)"/>
     
-    <!-- Blood/horror ambient light from below -->
-    <ellipse cx="256" cy="480" rx="200" ry="150" fill="#330000" opacity="0.15" filter="url(#heavyBlur)"/>
+    <!-- Green toxic ambient glow from below -->
+    <ellipse cx="256" cy="480" rx="180" ry="140" fill="#0a2200" opacity="0.2" filter="url(#heavyBlur)"/>
     
-    <!-- Smoke wisps background -->
-    <g opacity="0.3">
-      <path d="M 100 450 C 120 380, 80 320, 130 260 C 160 220, 100 200, 140 150" 
-            stroke="#2a0030" stroke-width="30" fill="none" filter="url(#heavyBlur)"/>
-      <path d="M 412 450 C 392 380, 432 320, 382 260 C 352 220, 412 200, 372 150" 
-            stroke="#2a0030" stroke-width="30" fill="none" filter="url(#heavyBlur)"/>
+    <!-- Background wisps of green death energy -->
+    <g opacity="0.15">
+      <path d="M 80 500 C 90 420, 60 350, 110 280 C 140 240, 90 200, 130 140" 
+            stroke="#1a4400" stroke-width="25" fill="none" filter="url(#heavyBlur)"/>
+      <path d="M 432 500 C 422 420, 452 350, 402 280 C 372 240, 422 200, 382 140" 
+            stroke="#1a4400" stroke-width="25" fill="none" filter="url(#heavyBlur)"/>
     </g>
     
-    <!-- === THE CREATURE === -->
+    <!-- === THE LICH SKULL === -->
     
-    <!-- Outer dark aura / silhouette -->
-    <ellipse cx="256" cy="260" rx="140" ry="180" fill="#0a0208" opacity="0.6" filter="url(#heavyBlur)"/>
+    <!-- Outer death aura -->
+    <ellipse cx="256" cy="250" rx="145" ry="185" fill="#051500" opacity="0.5" filter="url(#heavyBlur)"/>
     
-    <!-- Head shape - skull-like, elongated -->
+    <!-- Skull shape - tall, narrow, menacing like the Lich -->
     <path d="
-      M 256 80
-      C 190 80, 145 120, 135 170
-      C 125 220, 130 270, 145 300
-      C 155 320, 170 335, 190 345
-      L 220 360
-      L 256 370
-      L 292 360
-      L 322 345
-      C 342 335, 357 320, 367 300
-      C 382 270, 387 220, 377 170
-      C 367 120, 322 80, 256 80 Z
-    " fill="url(#face)" stroke="#3a1515" stroke-width="1.5"/>
+      M 256 75
+      C 185 75, 140 115, 130 170
+      C 118 230, 125 285, 140 315
+      C 152 340, 175 360, 200 370
+      C 220 378, 240 382, 256 384
+      C 272 382, 292 378, 312 370
+      C 337 360, 360 340, 372 315
+      C 387 285, 394 230, 382 170
+      C 372 115, 327 75, 256 75 Z
+    " fill="url(#skullFace)" stroke="#2a2a18" stroke-width="1.5"/>
     
-    <!-- Skull bone structure highlights (3D effect) -->
-    <!-- Forehead highlight -->
-    <ellipse cx="256" cy="130" rx="60" ry="35" fill="url(#boneHighlight)" opacity="0.4"/>
-    <!-- Left cheekbone -->
-    <ellipse cx="180" cy="240" rx="30" ry="40" fill="url(#boneHighlight)" opacity="0.2"/>
-    <!-- Right cheekbone -->
-    <ellipse cx="332" cy="240" rx="30" ry="40" fill="url(#boneHighlight)" opacity="0.2"/>
+    <!-- Skull bone structure -->
+    <!-- Forehead dome -->
+    <ellipse cx="256" cy="125" rx="65" ry="40" fill="url(#boneHL)" opacity="0.5"/>
+    <!-- Left temple sunken -->
+    <ellipse cx="185" cy="165" rx="32" ry="38" fill="#0a0a05" opacity="0.9"/>
+    <!-- Right temple sunken -->
+    <ellipse cx="327" cy="165" rx="32" ry="38" fill="#0a0a05" opacity="0.9"/>
+    <!-- Cheekbone left -->
+    <ellipse cx="175" cy="250" rx="22" ry="35" fill="url(#boneHL)" opacity="0.3"/>
+    <!-- Cheekbone right -->
+    <ellipse cx="337" cy="250" rx="22" ry="35" fill="url(#boneHL)" opacity="0.3"/>
     
-    <!-- Sunken temple (left) - creates depth -->
-    <ellipse cx="185" cy="175" rx="35" ry="40" fill="#050102" opacity="0.8"/>
-    <!-- Sunken temple (right) -->
-    <ellipse cx="327" cy="175" rx="35" ry="40" fill="#050102" opacity="0.8"/>
+    <!-- === HORNS - Lich style crown of bone === -->
+    <!-- Center spike -->
+    <path d="M 248 90 L 256 42 L 264 90 Z" fill="#2a2a18" stroke="#3a3a25" stroke-width="0.8"/>
+    <!-- Left spike -->
+    <path d="M 218 95 L 228 52 L 236 100 Z" fill="#2a2a18" stroke="#3a3a25" stroke-width="0.8"/>
+    <!-- Right spike -->
+    <path d="M 276 100 L 284 52 L 294 95 Z" fill="#2a2a18" stroke="#3a3a25" stroke-width="0.8"/>
+    <!-- Far left horn - curved like the Lich -->
+    <path d="M 170 130 C 155 108, 138 88, 118 65 C 115 60, 120 58, 125 62 C 142 80, 158 100, 172 125 Z" 
+          fill="#252515" stroke="#3a3a25" stroke-width="0.8"/>
+    <!-- Far right horn - curved -->
+    <path d="M 342 130 C 357 108, 374 88, 394 65 C 397 60, 392 58, 387 62 C 370 80, 354 100, 340 125 Z" 
+          fill="#252515" stroke="#3a3a25" stroke-width="0.8"/>
     
-    <!-- Deep eye sockets -->
-    <!-- Left socket -->
-    <ellipse cx="210" cy="215" rx="38" ry="32" fill="#020001" stroke="#2a1010" stroke-width="1"/>
-    <!-- Right socket -->
-    <ellipse cx="302" cy="215" rx="38" ry="32" fill="#020001" stroke="#2a1010" stroke-width="1"/>
+    <!-- === EYE SOCKETS - deep hollow === -->
+    <ellipse cx="208" cy="210" rx="40" ry="35" fill="#000000"/>
+    <ellipse cx="304" cy="210" rx="40" ry="35" fill="#000000"/>
     
-    <!-- Socket depth shadow -->
-    <ellipse cx="210" cy="218" rx="32" ry="26" fill="#000000"/>
-    <ellipse cx="302" cy="218" rx="32" ry="26" fill="#000000"/>
+    <!-- === GREEN FIRE EYES - THE LICH SIGNATURE === -->
     
-    <!-- === EYES - THE SCARY PART === -->
-    
-    <!-- Left eye - outer fire glow -->
-    <ellipse cx="210" cy="215" rx="45" ry="35" fill="url(#fireEye)" filter="url(#blur)"/>
-    <!-- Left eye - inner glow -->
-    <ellipse cx="210" cy="215" rx="25" ry="20" fill="url(#fireEye)" filter="url(#softBlur)"/>
+    <!-- Left eye - outer green inferno -->
+    <ellipse cx="208" cy="208" rx="55" ry="45" fill="url(#greenFire)" filter="url(#blur)"/>
+    <!-- Left eye - mid glow -->
+    <ellipse cx="208" cy="208" rx="30" ry="25" fill="url(#greenFire)" filter="url(#softBlur)"/>
     <!-- Left eye - core -->
-    <ellipse cx="210" cy="215" rx="14" ry="12" fill="url(#eyeCore)"/>
-    <!-- Left eye - slit pupil -->
-    <ellipse cx="210" cy="215" rx="4" ry="12" fill="#000000"/>
-    <!-- Left eye - tiny highlight -->
-    <ellipse cx="216" cy="209" rx="3" ry="2" fill="#ffffff" opacity="0.9"/>
+    <ellipse cx="208" cy="208" rx="16" ry="14" fill="url(#eyeCore)"/>
+    <!-- Left eye - slit pupil (vertical like the Lich) -->
+    <ellipse cx="208" cy="208" rx="4" ry="14" fill="#001a00"/>
+    <!-- Left eye - bright highlight -->
+    <ellipse cx="215" cy="200" rx="4" ry="3" fill="#ddffaa" opacity="0.95"/>
     
-    <!-- Right eye - outer fire glow -->
-    <ellipse cx="302" cy="215" rx="45" ry="35" fill="url(#fireEye)" filter="url(#blur)"/>
-    <!-- Right eye - inner glow -->
-    <ellipse cx="302" cy="215" rx="25" ry="20" fill="url(#fireEye)" filter="url(#softBlur)"/>
+    <!-- Right eye - outer green inferno -->
+    <ellipse cx="304" cy="208" rx="55" ry="45" fill="url(#greenFire)" filter="url(#blur)"/>
+    <!-- Right eye - mid glow -->
+    <ellipse cx="304" cy="208" rx="30" ry="25" fill="url(#greenFire)" filter="url(#softBlur)"/>
     <!-- Right eye - core -->
-    <ellipse cx="302" cy="215" rx="14" ry="12" fill="url(#eyeCore)"/>
+    <ellipse cx="304" cy="208" rx="16" ry="14" fill="url(#eyeCore)"/>
     <!-- Right eye - slit pupil -->
-    <ellipse cx="302" cy="215" rx="4" ry="12" fill="#000000"/>
-    <!-- Right eye - tiny highlight -->
-    <ellipse cx="308" cy="209" rx="3" ry="2" fill="#ffffff" opacity="0.9"/>
+    <ellipse cx="304" cy="208" rx="4" ry="14" fill="#001a00"/>
+    <!-- Right eye - bright highlight -->
+    <ellipse cx="311" cy="200" rx="4" ry="3" fill="#ddffaa" opacity="0.95"/>
     
-    <!-- Eye socket rim lighting -->
-    <path d="M 175 195 Q 210 180, 245 195" stroke="#4a1515" stroke-width="1.5" fill="none" opacity="0.6"/>
-    <path d="M 267 195 Q 302 180, 337 195" stroke="#4a1515" stroke-width="1.5" fill="none" opacity="0.6"/>
+    <!-- === NOSE - skeletal slit === -->
+    <path d="M 250 240 L 246 280 L 256 284 L 266 280 L 262 240" fill="#0a0a05" stroke="#2a2a15" stroke-width="0.8"/>
+    <ellipse cx="249" cy="282" rx="5" ry="3.5" fill="#000000"/>
+    <ellipse cx="263" cy="282" rx="5" ry="3.5" fill="#000000"/>
     
-    <!-- === NOSE - skeletal === -->
-    <!-- Nose bridge shadow -->
-    <path d="M 250 230 L 245 275 L 256 280 L 267 275 L 262 230" fill="#0a0202" stroke="#2a1010" stroke-width="0.8"/>
-    <!-- Nostrils -->
-    <ellipse cx="247" cy="278" rx="6" ry="4" fill="#000000"/>
-    <ellipse cx="265" cy="278" rx="6" ry="4" fill="#000000"/>
-    
-    <!-- === MOUTH - terrifying grin === -->
-    <!-- Mouth cavity -->
+    <!-- === MOUTH - the Lich's terrifying maw === -->
+    <!-- Mouth cavity - wide, gaping -->
     <path d="
-      M 200 305
-      Q 210 295, 230 298
-      Q 256 292, 282 298
-      Q 302 295, 312 305
-      Q 305 340, 290 350
-      L 256 355
-      L 222 350
-      Q 207 340, 200 305 Z
-    " fill="#020001"/>
+      M 185 310
+      C 195 298, 220 300, 256 294
+      C 292 300, 317 298, 327 310
+      C 318 355, 298 370, 256 375
+      C 214 370, 194 355, 185 310 Z
+    " fill="#000000"/>
     
-    <!-- Teeth - top row (sharp, uneven) -->
-    <g fill="#d4c4a0" stroke="#8a7a60" stroke-width="0.5">
-      <!-- Fang left -->
-      <path d="M 208 304 L 212 304 L 210 322 L 206 318 Z"/>
-      <rect x="214" y="301" width="10" height="12" rx="1"/>
-      <rect x="226" y="300" width="10" height="11" rx="1"/>
-      <rect x="238" y="299" width="10" height="10" rx="1"/>
-      <rect x="250" y="298" width="10" height="10" rx="1"/>
-      <rect x="262" y="299" width="10" height="10" rx="1"/>
-      <rect x="274" y="300" width="10" height="11" rx="1"/>
-      <rect x="286" y="301" width="10" height="12" rx="1"/>
-      <!-- Fang right -->
-      <path d="M 300 304 L 304 304 L 306 322 L 302 318 Z"/>
+    <!-- Teeth - jagged, uneven, skull-like -->
+    <g fill="#8a8a60" stroke="#5a5a38" stroke-width="0.5">
+      <!-- Top teeth -->
+      <path d="M 192 308 L 196 308 L 194 326 L 190 322 Z"/>
+      <path d="M 202 305 L 207 305 L 206 320 L 201 318 Z"/>
+      <path d="M 214 303 L 219 303 L 218 318 L 213 316 Z"/>
+      <path d="M 226 301 L 231 301 L 230 315 L 225 314 Z"/>
+      <path d="M 238 300 L 243 300 L 242 314 L 237 313 Z"/>
+      <path d="M 250 299 L 255 299 L 254 313 L 249 312 Z"/>
+      <path d="M 262 299 L 267 299 L 266 313 L 261 312 Z"/>
+      <path d="M 274 300 L 279 300 L 278 314 L 273 313 Z"/>
+      <path d="M 286 301 L 291 301 L 290 315 L 285 314 Z"/>
+      <path d="M 298 303 L 303 303 L 302 318 L 297 316 Z"/>
+      <path d="M 310 305 L 315 305 L 314 320 L 309 318 Z"/>
+      <path d="M 320 308 L 324 308 L 322 322 L 318 326 Z"/>
+      
+      <!-- Bottom teeth - fewer, sharper -->
+      <path d="M 200 358 L 204 358 L 203 344 L 199 346 Z"/>
+      <path d="M 215 360 L 219 360 L 218 346 L 214 348 Z"/>
+      <path d="M 230 362 L 234 362 L 233 348 L 229 350 Z"/>
+      <path d="M 245 363 L 249 363 L 248 349 L 244 351 Z"/>
+      <path d="M 260 363 L 264 363 L 263 349 L 259 351 Z"/>
+      <path d="M 275 363 L 279 363 L 278 349 L 274 351 Z"/>
+      <path d="M 290 362 L 294 362 L 293 348 L 289 350 Z"/>
+      <path d="M 305 360 L 309 360 L 308 346 L 304 348 Z"/>
+      <path d="M 318 358 L 322 358 L 321 344 L 317 346 Z"/>
     </g>
     
-    <!-- Teeth - bottom row (fewer, sharper) -->
-    <g fill="#c4b490" stroke="#7a6a50" stroke-width="0.5">
-      <path d="M 220 342 L 224 342 L 223 330 L 219 332 Z"/>
-      <path d="M 232 343 L 236 343 L 235 332 L 231 334 Z"/>
-      <path d="M 244 344 L 248 344 L 247 333 L 243 335 Z"/>
-      <path d="M 256 344 L 260 344 L 259 333 L 255 335 Z"/>
-      <path d="M 268 344 L 272 344 L 271 333 L 267 335 Z"/>
-      <path d="M 280 343 L 284 343 L 283 332 L 279 334 Z"/>
-      <path d="M 292 342 L 296 342 L 295 330 L 291 332 Z"/>
-    </g>
+    <!-- Green energy leaking from mouth -->
+    <ellipse cx="256" cy="335" rx="40" ry="15" fill="#22aa00" opacity="0.08" filter="url(#softBlur)"/>
     
-    <!-- Gums -->
-    <path d="M 205 305 Q 256 296, 307 305" stroke="#4a1515" stroke-width="2" fill="none" opacity="0.5"/>
-    <path d="M 215 342 Q 256 348, 297 342" stroke="#4a1515" stroke-width="2" fill="none" opacity="0.5"/>
-    
-    <!-- Dripping saliva/blood -->
-    <path d="M 235 355 Q 234 370, 236 385 Q 237 390, 236 395" 
-          stroke="#660000" stroke-width="1.5" fill="none" opacity="0.5"/>
-    <path d="M 278 355 Q 280 375, 279 390 Q 278 400, 279 410" 
-          stroke="#660000" stroke-width="1.5" fill="none" opacity="0.6"/>
-    <!-- Drip drops -->
-    <ellipse cx="236" cy="398" rx="2" ry="3" fill="#660000" opacity="0.4"/>
-    <ellipse cx="279" cy="413" rx="2" ry="3" fill="#660000" opacity="0.5"/>
-    
-    <!-- === HORNS / CRANIAL FEATURES === -->
-    <!-- Left horn/antler stub -->
-    <path d="M 170 140 C 155 120, 135 105, 120 85 L 125 82 C 140 100, 158 115, 175 135 Z" 
-          fill="#1a0a0a" stroke="#3a1515" stroke-width="1"/>
-    <!-- Right horn/antler stub -->
-    <path d="M 342 140 C 357 120, 377 105, 392 85 L 387 82 C 372 100, 354 115, 337 135 Z" 
-          fill="#1a0a0a" stroke="#3a1515" stroke-width="1"/>
-    
-    <!-- Crown/cranial ridges -->
-    <path d="M 200 95 L 210 80 L 220 95" fill="#1a0a0a" stroke="#2a1010" stroke-width="0.8" opacity="0.7"/>
-    <path d="M 240 88 L 256 70 L 272 88" fill="#1a0a0a" stroke="#2a1010" stroke-width="0.8" opacity="0.7"/>
-    <path d="M 292 95 L 302 80 L 312 95" fill="#1a0a0a" stroke="#2a1010" stroke-width="0.8" opacity="0.7"/>
-    
-    <!-- === CLOAK / BODY === -->
-    <!-- Main cloak flowing down -->
+    <!-- === ROBE / CLOAK - tattered, flowing === -->
     <path d="
-      M 135 280
-      C 120 310, 100 360, 85 420
-      C 75 460, 70 490, 65 512
-      L 447 512
-      C 442 490, 437 460, 427 420
-      C 412 360, 392 310, 377 280
-      C 365 300, 350 320, 340 345
-      L 322 360
-      L 292 370
-      L 256 375
-      L 220 370
-      L 190 360
-      L 172 345
-      C 162 320, 147 300, 135 280 Z
-    " fill="#0a0208" stroke="#1a0a10" stroke-width="1"/>
+      M 130 290
+      C 115 320, 90 370, 70 430
+      C 58 468, 50 495, 45 512
+      L 467 512
+      C 462 495, 454 468, 442 430
+      C 422 370, 397 320, 382 290
+      C 368 310, 350 335, 337 360
+      C 315 375, 290 382, 256 385
+      C 222 382, 197 375, 175 360
+      C 162 335, 144 310, 130 290 Z
+    " fill="#0a0d05" stroke="#151a0a" stroke-width="1"/>
     
-    <!-- Cloak fabric folds -->
-    <path d="M 140 320 C 130 360, 100 420, 80 480" stroke="#150510" stroke-width="3" fill="none" opacity="0.5"/>
-    <path d="M 372 320 C 382 360, 412 420, 432 480" stroke="#150510" stroke-width="3" fill="none" opacity="0.5"/>
-    <path d="M 200 370 C 195 400, 180 450, 165 500" stroke="#150510" stroke-width="2" fill="none" opacity="0.3"/>
-    <path d="M 312 370 C 317 400, 332 450, 347 500" stroke="#150510" stroke-width="2" fill="none" opacity="0.3"/>
+    <!-- Robe fabric folds -->
+    <path d="M 125 330 C 110 370, 80 430, 55 490" stroke="#0d1008" stroke-width="4" fill="none" opacity="0.6"/>
+    <path d="M 387 330 C 402 370, 432 430, 457 490" stroke="#0d1008" stroke-width="4" fill="none" opacity="0.6"/>
+    <path d="M 180 370 C 170 400, 150 450, 130 500" stroke="#0d1008" stroke-width="2.5" fill="none" opacity="0.4"/>
+    <path d="M 332 370 C 342 400, 362 450, 382 500" stroke="#0d1008" stroke-width="2.5" fill="none" opacity="0.4"/>
     
-    <!-- Tattered cloak bottom edges -->
-    <path d="M 65 512 L 60 480 C 62 485, 55 495, 50 512 Z" fill="#0a0208" opacity="0.7"/>
-    <path d="M 120 512 L 110 470 C 115 480, 105 495, 100 512 Z" fill="#0a0208" opacity="0.6"/>
-    <path d="M 180 512 L 175 475 C 178 485, 170 500, 165 512 Z" fill="#0a0208" opacity="0.5"/>
-    <path d="M 340 512 L 345 475 C 342 485, 350 500, 355 512 Z" fill="#0a0208" opacity="0.5"/>
-    <path d="M 400 512 L 405 470 C 400 480, 410 495, 415 512 Z" fill="#0a0208" opacity="0.6"/>
-    <path d="M 447 512 L 452 480 C 450 485, 457 495, 462 512 Z" fill="#0a0208" opacity="0.7"/>
+    <!-- Tattered edges -->
+    <path d="M 45 512 L 38 475 C 40 482, 32 495, 28 512 Z" fill="#0a0d05" opacity="0.7"/>
+    <path d="M 100 512 L 92 468 C 96 478, 86 492, 80 512 Z" fill="#0a0d05" opacity="0.6"/>
+    <path d="M 165 512 L 160 472 C 163 482, 155 498, 148 512 Z" fill="#0a0d05" opacity="0.5"/>
+    <path d="M 256 512 L 254 478 C 256 488, 250 502, 246 512 Z" fill="#0a0d05" opacity="0.4"/>
+    <path d="M 347 512 L 352 472 C 349 482, 357 498, 364 512 Z" fill="#0a0d05" opacity="0.5"/>
+    <path d="M 420 512 L 425 468 C 420 478, 430 492, 435 512 Z" fill="#0a0d05" opacity="0.6"/>
+    <path d="M 467 512 L 474 475 C 472 482, 480 495, 484 512 Z" fill="#0a0d05" opacity="0.7"/>
     
-    <!-- === HANDS / CLAWS === -->
-    <!-- Left claw emerging from cloak -->
-    <g transform="translate(115, 380) rotate(-15)">
-      <path d="M 0 0 C -5 -15, -10 -35, -8 -55 L -3 -55 C -4 -38, -1 -18, 3 0 Z" fill="#1a0a0a"/>
-      <path d="M 8 0 C 5 -18, 0 -40, 2 -60 L 7 -58 C 6 -42, 8 -20, 12 0 Z" fill="#1a0a0a"/>
-      <path d="M 18 0 C 17 -15, 16 -35, 18 -50 L 22 -48 C 21 -35, 20 -18, 23 0 Z" fill="#1a0a0a"/>
+    <!-- === SKELETAL HANDS / CLAWS === -->
+    <!-- Left hand -->
+    <g transform="translate(100, 370) rotate(-20)">
+      <!-- Palm -->
+      <ellipse cx="10" cy="-5" rx="15" ry="20" fill="#252518"/>
+      <!-- Fingers -->
+      <path d="M -2 -15 C -4 -35, -6 -55, -4 -72 L 1 -70 C 0 -55, -1 -35, 1 -15 Z" fill="#252518" stroke="#3a3a20" stroke-width="0.5"/>
+      <path d="M 8 -18 C 7 -40, 5 -62, 7 -80 L 12 -78 C 11 -62, 12 -40, 13 -18 Z" fill="#252518" stroke="#3a3a20" stroke-width="0.5"/>
+      <path d="M 18 -16 C 18 -36, 18 -56, 20 -72 L 24 -70 C 23 -56, 22 -36, 22 -16 Z" fill="#252518" stroke="#3a3a20" stroke-width="0.5"/>
+      <path d="M 27 -12 C 29 -28, 31 -44, 33 -56 L 37 -54 C 35 -42, 33 -28, 31 -12 Z" fill="#252518" stroke="#3a3a20" stroke-width="0.5"/>
       <!-- Claws -->
-      <path d="M -8 -55 L -12 -68 L -4 -58 Z" fill="#2a1515"/>
-      <path d="M 2 -60 L -2 -74 L 6 -62 Z" fill="#2a1515"/>
-      <path d="M 18 -50 L 16 -63 L 22 -52 Z" fill="#2a1515"/>
+      <path d="M -4 -72 L -8 -90 L 0 -74 Z" fill="#1a2a10"/>
+      <path d="M 7 -80 L 3 -98 L 12 -82 Z" fill="#1a2a10"/>
+      <path d="M 20 -72 L 18 -88 L 24 -74 Z" fill="#1a2a10"/>
+      <path d="M 33 -56 L 32 -70 L 37 -58 Z" fill="#1a2a10"/>
     </g>
     
-    <!-- Right claw -->
-    <g transform="translate(390, 380) rotate(15)">
-      <path d="M 0 0 C 5 -15, 10 -35, 8 -55 L 3 -55 C 4 -38, 1 -18, -3 0 Z" fill="#1a0a0a"/>
-      <path d="M -8 0 C -5 -18, 0 -40, -2 -60 L -7 -58 C -6 -42, -8 -20, -12 0 Z" fill="#1a0a0a"/>
-      <path d="M -18 0 C -17 -15, -16 -35, -18 -50 L -22 -48 C -21 -35, -20 -18, -23 0 Z" fill="#1a0a0a"/>
-      <!-- Claws -->
-      <path d="M 8 -55 L 12 -68 L 4 -58 Z" fill="#2a1515"/>
-      <path d="M -2 -60 L 2 -74 L -6 -62 Z" fill="#2a1515"/>
-      <path d="M -18 -50 L -16 -63 L -22 -52 Z" fill="#2a1515"/>
+    <!-- Right hand -->
+    <g transform="translate(400, 370) rotate(20)">
+      <ellipse cx="10" cy="-5" rx="15" ry="20" fill="#252518"/>
+      <path d="M -2 -15 C -4 -35, -6 -55, -4 -72 L 1 -70 C 0 -55, -1 -35, 1 -15 Z" fill="#252518" stroke="#3a3a20" stroke-width="0.5"/>
+      <path d="M 8 -18 C 7 -40, 5 -62, 7 -80 L 12 -78 C 11 -62, 12 -40, 13 -18 Z" fill="#252518" stroke="#3a3a20" stroke-width="0.5"/>
+      <path d="M 18 -16 C 18 -36, 18 -56, 20 -72 L 24 -70 C 23 -56, 22 -36, 22 -16 Z" fill="#252518" stroke="#3a3a20" stroke-width="0.5"/>
+      <path d="M 27 -12 C 29 -28, 31 -44, 33 -56 L 37 -54 C 35 -42, 33 -28, 31 -12 Z" fill="#252518" stroke="#3a3a20" stroke-width="0.5"/>
+      <path d="M -4 -72 L -8 -90 L 0 -74 Z" fill="#1a2a10"/>
+      <path d="M 7 -80 L 3 -98 L 12 -82 Z" fill="#1a2a10"/>
+      <path d="M 20 -72 L 18 -88 L 24 -74 Z" fill="#1a2a10"/>
+      <path d="M 33 -56 L 32 -70 L 37 -58 Z" fill="#1a2a10"/>
     </g>
     
-    <!-- Eye glow light on surrounding environment -->
-    <ellipse cx="256" cy="300" rx="120" ry="80" fill="#330800" opacity="0.1" filter="url(#heavyBlur)"/>
+    <!-- Green eye glow illuminating the environment -->
+    <ellipse cx="256" cy="290" rx="130" ry="90" fill="#1a4400" opacity="0.12" filter="url(#heavyBlur)"/>
     
-    <!-- Light reflection on cloak from eyes -->
-    <path d="M 190 300 C 200 280, 220 290, 230 320" stroke="#330800" stroke-width="8" fill="none" opacity="0.08" filter="url(#blur)"/>
-    <path d="M 322 300 C 312 280, 292 290, 282 320" stroke="#330800" stroke-width="8" fill="none" opacity="0.08" filter="url(#blur)"/>
+    <!-- Light on robe from eyes -->
+    <path d="M 185 310 C 195 290, 220 300, 225 335" stroke="#228800" stroke-width="10" fill="none" opacity="0.05" filter="url(#blur)"/>
+    <path d="M 327 310 C 317 290, 292 300, 287 335" stroke="#228800" stroke-width="10" fill="none" opacity="0.05" filter="url(#blur)"/>
     
-    <!-- Floating embers/particles -->
-    <circle cx="120" cy="150" r="1.5" fill="#ff4400" opacity="0.6"/>
-    <circle cx="400" cy="180" r="1" fill="#ff4400" opacity="0.5"/>
-    <circle cx="90" cy="300" r="1.5" fill="#ff2200" opacity="0.4"/>
-    <circle cx="430" cy="280" r="1" fill="#ff4400" opacity="0.5"/>
-    <circle cx="150" cy="100" r="1" fill="#ff6600" opacity="0.3"/>
-    <circle cx="370" cy="120" r="1.5" fill="#ff2200" opacity="0.4"/>
+    <!-- Floating green death particles -->
+    <circle cx="110" cy="140" r="2" fill="#66ff00" opacity="0.5"/>
+    <circle cx="405" cy="170" r="1.5" fill="#44cc00" opacity="0.4"/>
+    <circle cx="85" cy="290" r="2" fill="#66ff00" opacity="0.3"/>
+    <circle cx="440" cy="270" r="1.5" fill="#44cc00" opacity="0.4"/>
+    <circle cx="140" cy="90" r="1.5" fill="#88ff00" opacity="0.3"/>
+    <circle cx="380" cy="110" r="2" fill="#66ff00" opacity="0.35"/>
+    <circle cx="160" cy="400" r="1.5" fill="#44cc00" opacity="0.25"/>
+    <circle cx="360" cy="410" r="1" fill="#66ff00" opacity="0.3"/>
     
-    <!-- Vignette overlay -->
+    <!-- Vignette -->
     <radialGradient id="vignette" cx="50%" cy="50%" r="50%">
       <stop offset="0%" stop-color="transparent"/>
       <stop offset="70%" stop-color="transparent"/>
