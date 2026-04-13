@@ -9,7 +9,7 @@ import time
 import os
 from datetime import datetime, timezone
 
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "1000PEPEUSDT"]
 INTERVAL = "1m"
 LIMIT = 1000
 OUTPUT_DIR = "data/features"
