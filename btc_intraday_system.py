@@ -8,7 +8,7 @@ import numpy as np
 
 INPUT_PATH = "data/features/research_dataset.csv"
 # Multi-asset: run backtest on each symbol and combine
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "1000PEPEUSDT"]
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
 
 RSI_PERIOD = 14
 EMA_PERIOD = 20
@@ -23,7 +23,6 @@ ROUND_TRIP_COST_BY_SYMBOL = {
     "SOLUSDT": 0.0012,
     "XRPUSDT": 0.0015,
     "CHZUSDT": 0.0015,   # low-liquidity alt
-    "1000PEPEUSDT": 0.0020,  # meme coin, wider spreads
 }
 
 def get_round_trip_cost(symbol: str) -> float:

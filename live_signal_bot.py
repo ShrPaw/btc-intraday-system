@@ -47,7 +47,9 @@ BINANCE_API_KEY = os.environ.get("BINANCE_API_KEY", "")
 BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET", "")
 PAPER_MODE = os.environ.get("PAPER_MODE", "true").lower() == "true"
 
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "1000PEPEUSDT"]
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
+# Only generate signals / allow trades on these symbols (subset of SYMBOLS)
+TRADING_SYMBOLS = ["XRPUSDT"]
 
 ROLLING_WINDOW = 10080  # 7 days of 1m candles
 CHECK_INTERVAL = 60
@@ -85,7 +87,7 @@ TRAIL_PCT_HIGH = 0.0045
 TRAIL_PCT_ELITE = 0.0040
 
 # Slippage by symbol
-SLIPPAGE = {"BTCUSDT": 0.0005, "ETHUSDT": 0.0008, "SOLUSDT": 0.0012, "XRPUSDT": 0.0015, "1000PEPEUSDT": 0.0020}
+SLIPPAGE = {"BTCUSDT": 0.0005, "ETHUSDT": 0.0008, "SOLUSDT": 0.0012, "XRPUSDT": 0.0015: 0.0020}
 
 # Default leverage per trade
 DEFAULT_LEVERAGE = 5
@@ -687,6 +689,9 @@ def _trade_decision(df):
 
 def check_for_signals():
     for symbol in SYMBOLS:
+        # Only trade on whitelisted symbols
+        if symbol not in TRADING_SYMBOLS:
+            continue
         # Skip if already in a position
         if symbol in active_positions:
             continue
