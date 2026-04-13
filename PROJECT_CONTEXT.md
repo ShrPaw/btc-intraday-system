@@ -223,6 +223,14 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - Bot running in paper mode (signals + buttons working)
 - Server IP: <YOUR_SERVER_IP>
 
+### ✅ Deployed (2026-04-14):
+- Bot running as systemd service on Alibaba Cloud ECS
+- Server IP: 47.84.102.150
+- Service: `btc-signal-bot.service` (auto-restart enabled)
+- Mode: LIVE (PAPER_MODE=false)
+- Logs: `/root/.openclaw/workspace/btc-intraday-system/live_bot.log`
+- Commands: `systemctl status btc-signal-bot`, `tail -f live_bot.log`, `systemctl restart btc-signal-bot`
+
 ### ⏳ Remaining (to go live):
 1. Activate Binance Futures account:
    - Complete KYC if not done
