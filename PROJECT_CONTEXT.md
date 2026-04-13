@@ -296,11 +296,44 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 
 ---
 
+## DEPLOYMENT STATUS (2026-04-14)
+
+### Infrastructure:
+- **Server:** Alibaba Cloud ECS (iZt4n45v2ngpm5cz1ml38cZ)
+- **Public IP:** 47.84.102.150
+- **OS:** Linux 6.8.0-100-generic (x64), Ubuntu-based, Python 3.12
+- **Dependencies installed:** websocket-client, pandas, numpy, requests, ccxt (system-wide pip)
+
+### Bot Service:
+- **Service name:** btc-signal-bot.service (systemd)
+- **Status:** Running ✅, enabled at boot
+- **Mode:** LIVE (PAPER_MODE=false)
+- **Log path:** /root/.openclaw/workspace/btc-intraday-system/live_bot.log
+- **Working dir:** /root/.openclaw/workspace/btc-intraday-system
+- **Commands:**
+  - Status: `systemctl status btc-signal-bot`
+  - Logs: `tail -f /root/.openclaw/workspace/btc-intraday-system/live_bot.log`
+  - Restart: `systemctl restart btc-signal-bot`
+  - Stop: `systemctl stop btc-signal-bot`
+
+### Known Issues:
+- **SSH blocked:** Alibaba Cloud security group needs port 22 inbound rule added
+- User is setting up Alibaba Cloud account (was in Chinese, now switching to English)
+- Need to add security group rule: TCP 22/22 from 0.0.0.0/0
+- Also recommend adding ports 80 and 443 for future use
+
+### Pending:
+1. ⏳ User adding SSH rule in Alibaba Cloud security group
+2. ⏳ User connecting via PuTTY from PC (has PuTTY installed)
+3. ✅ .env configured with live credentials
+4. ✅ Bot running in live mode
+5. ✅ Code pushed to GitHub
+
 ## NEXT SESSION STARTUP
 
 1. Read this file first
-2. Check bot status: `ps aux | grep live_signal_bot`
-3. Check logs: `tail -50 btc-intraday-system/live_bot.log`
-4. If bot not running: `cd btc-intraday-system && nohup python3 -u live_signal_bot.py >> live_bot.log 2>&1 &`
-5. To go live: get Binance API keys (see LIVE SIGNAL BOT section above), update .env, set PAPER_MODE=false
-6. To deploy to VPS: copy project + .env, set up systemd service
+2. Check bot status: `systemctl status btc-signal-bot`
+3. Check logs: `tail -50 /root/.openclaw/workspace/btc-intraday-system/live_bot.log`
+4. If bot not running: `systemctl start btc-signal-bot`
+5. SSH issue: User needs to add port 22 rule in Alibaba Cloud security group (47.84.102.150)
+6. User connects via PuTTY from their Windows PC
