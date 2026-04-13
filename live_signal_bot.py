@@ -140,6 +140,20 @@ def get_exchange():
     return _exchange
 
 
+def get_account_balance() -> float:
+    """Fetch available USDT balance from Binance Futures. Falls back to PAPER_EQUITY."""
+    if PAPER_MODE:
+        return float(os.environ.get("PAPER_EQUITY", "10000"))
+    try:
+        ex = get_exchange()
+        balance = ex.fetch_balance()
+        usdt_free = balance.get("USDT", {}).get("free", 0)
+        return float(usdt_free)
+    except Exception as e:
+        log.error(f"Failed to fetch balance: {e}")
+        return 0.0
+
+
 def execute_order(symbol: str, direction: str, size_usd: float, leverage: int = DEFAULT_LEVERAGE) -> dict | None:
     """Place a market order on Binance Futures. Returns order dict or None."""
     if PAPER_MODE:
@@ -829,11 +843,21 @@ def execute_trade(symbol: str, direction: str, leverage: int, msg_id: int | None
             "trail_stop": None,
         }
 
-        # Position sizing based on mode
+        # Position sizing based on actual account balance
+        equity = get_account_balance()
         mode_risk = {"MILD": 0.025, "MID": 0.03, "PREMIUM": 0.0325, "HIGH": 0.035, "ELITE": 0.04}
         risk_pct = mode_risk.get(pos["mode"], 0.03)
-        size_usd = (risk_pct * 10000) / stop_pct  # default $10k equity
-        pos["size_usd"] = min(size_usd, 10000 * 10)  # cap at 10x
+        size_usd = (risk_pct * equity) / stop_pct
+        pos["size_usd"] = min(size_usd, equity * 10)  # cap at 10x leverage
+        log.info(f"📊 Position sizing: equity=${equity:.2f} risk={risk_pct:.1%} stop={stop_pct:.2%} → size=${size_usd:.2f}")
+
+        # Safety: reject if equity too low or position too small
+        if equity < 1.0:
+            answer_callback(callback_id, f"❌ Insufficient balance: ${equity:.2f}")
+            return
+        if size_usd < 5.0:
+            answer_callback(callback_id, f"❌ Position too small: ${size_usd:.2f} (min $5)")
+            return
 
         # Execute
         order = execute_order(symbol, direction, pos["size_usd"], leverage)
