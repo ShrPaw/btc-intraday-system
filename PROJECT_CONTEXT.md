@@ -141,7 +141,7 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - Default leverage: 5x
 - Position monitor: every 15s
 - Mode: PAPER (set PAPER_MODE=false for live)
-- Server IP: 8.219.194.199
+- Server IP: <YOUR_SERVER_IP>
 
 ---
 
@@ -221,7 +221,7 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - Telegram bot created: @ShrPawsPsudoBot
 - Bot token + chat ID configured in .env
 - Bot running in paper mode (signals + buttons working)
-- Server IP: 8.219.194.199
+- Server IP: <YOUR_SERVER_IP>
 
 ### ⏳ Remaining (to go live):
 1. Activate Binance Futures account:
@@ -230,7 +230,7 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 2. Create Binance API key with these restrictions:
    - Enable Reading ✅
    - Enable Futures ✅
-   - **IP Restriction: add 8.219.194.199** (required for Futures API)
+   - **IP Restriction: add <YOUR_SERVER_IP>** (required for Futures API)
    - Disable Spot Trading ❌
    - Disable Withdrawals ❌
    - Disable Universal Transfer ❌
