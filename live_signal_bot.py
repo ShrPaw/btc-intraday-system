@@ -80,7 +80,11 @@ TP3_SIZE = 0.15
 TP4_SIZE = 0.15
 
 COOLDOWN_BARS_5M = 3
-ALLOWED_MODES = {"MILD", "PREMIUM", "HIGH", "ELITE"}
+ALLOWED_MODES = {"MILD", "MID", "PREMIUM", "HIGH", "ELITE"}
+
+# Structure gate: how many 5m bars to look back for EMA reclaim + BOS alignment
+# 3 = tight (backtested, fewer signals), 5 = relaxed (more signals, less precise)
+STRUCTURE_GATE_WINDOW = 5
 
 TRAIL_PCT_MID = 0.0050
 TRAIL_PCT_HIGH = 0.0045
@@ -466,12 +470,12 @@ def add_ema_bos_features_5m(df: pd.DataFrame) -> pd.DataFrame:
     df["bos_long"] = df["high"] > df["prev_swing_high"]
     df["bos_short"] = df["low"] < df["prev_swing_low"]
     df["structure_trigger_long"] = (
-        df["ema_reclaim_long"].rolling(3).max().fillna(0).astype(bool) &
-        df["bos_long"].rolling(3).max().fillna(0).astype(bool)
+        df["ema_reclaim_long"].rolling(STRUCTURE_GATE_WINDOW, min_periods=1).max().fillna(0).astype(bool) &
+        df["bos_long"].rolling(STRUCTURE_GATE_WINDOW, min_periods=1).max().fillna(0).astype(bool)
     )
     df["structure_trigger_short"] = (
-        df["ema_reclaim_short"].rolling(3).max().fillna(0).astype(bool) &
-        df["bos_short"].rolling(3).max().fillna(0).astype(bool)
+        df["ema_reclaim_short"].rolling(STRUCTURE_GATE_WINDOW, min_periods=1).max().fillna(0).astype(bool) &
+        df["bos_short"].rolling(STRUCTURE_GATE_WINDOW, min_periods=1).max().fillna(0).astype(bool)
     )
     # Structural stop: 4-bar lookback (matches backtester v5.5)
     stop_lookback = 4

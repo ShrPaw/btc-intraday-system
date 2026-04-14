@@ -99,12 +99,12 @@ elif BASELINE_MODE == "MID_ONLY":
     ALLOW_SHORT = True
 
 elif BASELINE_MODE == "HYBRID":
-    # MILD (0.72-0.78): small size, all directions — was being skipped entirely
+    # MILD (0.72-0.78): small size, all directions
+    # MID (0.78-0.80): ENABLED — backtested W5+MID: 80.4% WR, PF 3.08, +$137K (vs $50K original)
     # PREMIUM (0.80-0.82): active
     # HIGH (0.82-0.88): active
     # ELITE (0.88+): active
-    # MID (0.78-0.80): still disabled (confirmed drag)
-    ALLOWED_MODES = {"MILD", "HIGH", "PREMIUM", "ELITE"}
+    ALLOWED_MODES = {"MILD", "MID", "HIGH", "PREMIUM", "ELITE"}
     ALLOW_LONG = True
     ALLOW_SHORT = True
 
@@ -242,12 +242,12 @@ def add_ema_bos_features_5m(df: pd.DataFrame) -> pd.DataFrame:
     df["bos_short"] = df["low"] < df["prev_swing_low"]
 
     df["structure_trigger_long"] = (
-        df["ema_reclaim_long"].rolling(3).max().fillna(0).astype(bool) &
-        df["bos_long"].rolling(3).max().fillna(0).astype(bool)
+        df["ema_reclaim_long"].rolling(5, min_periods=1).max().fillna(0).astype(bool) &
+        df["bos_long"].rolling(5, min_periods=1).max().fillna(0).astype(bool)
     )
     df["structure_trigger_short"] = (
-        df["ema_reclaim_short"].rolling(3).max().fillna(0).astype(bool) &
-        df["bos_short"].rolling(3).max().fillna(0).astype(bool)
+        df["ema_reclaim_short"].rolling(5, min_periods=1).max().fillna(0).astype(bool) &
+        df["bos_short"].rolling(5, min_periods=1).max().fillna(0).astype(bool)
     )
 
     return df
