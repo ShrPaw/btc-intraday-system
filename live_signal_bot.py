@@ -304,11 +304,18 @@ def format_signal(symbol: str, row: pd.Series) -> tuple[str, dict]:
     h4_rsi = float(row["h4_rsi"])
     m15_rsi = float(row["m15_rsi"])
 
+    # Structural stop: 4-bar lookback (matches backtester v5.5)
     if row["direction"] == 1:
-        stop_pct = max((entry - float(row["low"])) / entry, 0.004)
+        structural_stop = float(row.get("structural_low", row["low"]))
+        if strategy == "RSI_TREND":
+            structural_stop = min(structural_stop, float(row["ema20"]))
+        stop_pct = max((entry - structural_stop) / entry, 0.004)
         stop = entry * (1 - stop_pct)
     else:
-        stop_pct = max((float(row["high"]) - entry) / entry, 0.004)
+        structural_stop = float(row.get("structural_high", row["high"]))
+        if strategy == "RSI_TREND":
+            structural_stop = max(structural_stop, float(row["ema20"]))
+        stop_pct = max((structural_stop - entry) / entry, 0.004)
         stop = entry * (1 + stop_pct)
 
     tp2_pct = TP2_PCT_TREND if strategy == "RSI_TREND" else TP2_PCT_SCALP
@@ -466,6 +473,10 @@ def add_ema_bos_features_5m(df: pd.DataFrame) -> pd.DataFrame:
         df["ema_reclaim_short"].rolling(3).max().fillna(0).astype(bool) &
         df["bos_short"].rolling(3).max().fillna(0).astype(bool)
     )
+    # Structural stop: 4-bar lookback (matches backtester v5.5)
+    stop_lookback = 4
+    df["structural_low"] = df["low"].rolling(stop_lookback).min()
+    df["structural_high"] = df["high"].rolling(stop_lookback).max()
     return df
 
 
@@ -854,11 +865,18 @@ def execute_trade(symbol: str, direction: str, leverage: int, msg_id: int | None
             return
 
         latest = analysis.iloc[-1]
+        # Structural stop: 4-bar lookback + EMA20 for RSI_TREND (matches backtester v5.5)
         if direction == "LONG":
-            stop_pct = max((entry_price - float(latest["low"])) / entry_price, 0.004)
+            structural_stop = float(latest.get("structural_low", latest["low"]))
+            if str(latest["setup_type"]) == "RSI_TREND":
+                structural_stop = min(structural_stop, float(latest["ema20"]))
+            stop_pct = max((entry_price - structural_stop) / entry_price, 0.004)
             stop_price = entry_price * (1 - stop_pct)
         else:
-            stop_pct = max((float(latest["high"]) - entry_price) / entry_price, 0.004)
+            structural_stop = float(latest.get("structural_high", latest["high"]))
+            if str(latest["setup_type"]) == "RSI_TREND":
+                structural_stop = max(structural_stop, float(latest["ema20"]))
+            stop_pct = max((structural_stop - entry_price) / entry_price, 0.004)
             stop_price = entry_price * (1 + stop_pct)
 
         tp2_pct = TP2_PCT_TREND if latest["setup_type"] == "RSI_TREND" else TP2_PCT_SCALP
