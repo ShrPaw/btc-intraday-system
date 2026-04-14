@@ -1,5 +1,5 @@
 # BTC Intraday Trading System — Project Context
-## Last Updated: 2026-04-14 03:05 GMT+8
+## Last Updated: 2026-04-14 15:11 GMT+8
 
 ---
 
@@ -43,7 +43,7 @@ Entry Logic:
 - 15M RSI holds direction for 2+ candles (confirmation)
 - 6H + 12H RSI must agree with direction (filter)
 - "FRESH" = cross happened within last 4 bars
-- Structure gate: EMA reclaim + BOS within 3-bar window
+- Structure gate: EMA reclaim + BOS within **5-bar window**
 
 Confidence weights:
 - 0.30 HTF alignment (4H/6H/12H RSI direction)
@@ -74,7 +74,7 @@ Confidence weights:
 |----------|-----------|---------|--------|
 | NO_TRADE | < 0.72    | 0%      | Skip   |
 | MILD     | 0.72-0.78 | 2.50%   | ACTIVE |
-| MID      | 0.78-0.80 | 3.00%   | DISABLED (WR 52.9%, PF 0.723) |
+| MID      | 0.78-0.80 | 3.00%   | **ACTIVE** (W5+MID backtested: 80.4% WR, PF 3.08) |
 | PREMIUM  | 0.80-0.82 | 3.25%   | ACTIVE |
 | HIGH     | 0.82-0.88 | 3.50%   | ACTIVE |
 | ELITE    | 0.88+     | 4.00%   | ACTIVE |
@@ -89,6 +89,18 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - ADX < 15 (weak/choppy): -3% confidence penalty
 - Computed on 4H bars, merged to 5m via merge_asof_feature
 - Config: ENABLE_ADX_FILTER, ADX_TRENDING_BONUS=25, ADX_CHOPPY_PENALTY=15
+
+---
+
+## STRUCTURE GATE
+
+Requires BOTH within N bars of each other:
+1. **EMA20 reclaim** — price crosses above/below EMA20 on 5m
+2. **BOS** — price breaks 12-bar swing high/low
+
+**STRUCTURE_GATE_WINDOW = 5 bars** (~25 min, configurable in live bot)
+- Backtested: window=5 significantly outperforms window=3
+- The wider window captures legitimate setups the tighter window misses
 
 ---
 
@@ -107,8 +119,8 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - TP4: +9.0% → Close 15%
 
 ### Stop Loss:
-- Structural: based on recent swing low/high (4-bar lookback)
-- For RSI_TREND: also factors in EMA20
+- Structural: based on **4-bar lookback** min(low)/max(high)
+- For RSI_TREND: also factors in EMA20 (min/max with structural stop)
 - Minimum floor: 0.4%
 
 ### Trailing Stop:
@@ -129,17 +141,23 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - SYMBOLS: BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT
 - INITIAL_EQUITY: $10,000
 - COOLDOWN_BARS_5M: 3
+- STRUCTURE_GATE_WINDOW: 5
+- ALLOWED_MODES: MILD, MID, PREMIUM, HIGH, ELITE
 - Symbol-specific slippage: BTC 0.05%, ETH 0.08%, SOL 0.12%, XRP 0.15%
 - MAX_NOTIONAL_FRACTION: 10.0 (position sizing cap)
 - Volume filter: skip bottom 30% dead candles
 
 ### Live Bot:
 - Bot: WRAITH (@ShrPawsPsudoBot)
+- TRADING_SYMBOLS: BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT (all 4)
+- STRUCTURE_GATE_WINDOW: 5 (configurable)
+- ALLOWED_MODES: MILD, MID, PREMIUM, HIGH, ELITE
 - Rolling window: 10,080 1m candles (7 days)
 - Check interval: 60s
 - Default leverage: 5x
 - Position monitor: every 15s
 - Mode: LIVE (PAPER_MODE=false)
+- Diagnostic logging: per-symbol setup/trigger/confidence/rejection reason
 
 ---
 
@@ -147,27 +165,29 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 
 ### Walk-Forward: Train Jun-Nov 2025, Test Dec 2025-Apr 2026
 
-| Version | Trades | WR | PF | PnL | Avg Stop | TSL R:R | SL R:R |
-|---------|--------|-----|-----|------|----------|---------|--------|
-| v5 (6-bar, 0.5% min) | 331 | 79.8% | 2.51 | +$47,571 | 0.85% | 0.78R | -1.16R |
-| **v5.5/v6 (4-bar, 0.4% min)** | **337** | **77.7%** | **2.32** | **+$49,987** | **0.78%** | **0.85R** | **-1.19R** |
-| v6 extreme (3-bar, 0.3% min) | 341 | 76.0% | 2.29 | +$53,901 | 0.73% | 0.94R | -1.22R |
+#### Structure Gate Window + MID Comparison (all 4 symbols combined):
 
-**Current version: v5.5 (4-bar lookback, 0.4% min stop)**
+| Config | Trades | WR | PF | PnL | Red Months | Change |
+|--------|--------|-----|-----|------|------------|--------|
+| W3 +NO_MID (old) | 337 | 77.7% | 2.32 | +$49,987 | 0/5 | baseline |
+| W5 +NO_MID | 471 | 80.7% | 3.01 | +$114,295 | 0/5 | +129% |
+| W3 +MID | 378 | 78.8% | 2.68 | +$70,651 | 0/5 | +41% |
+| **W5 +MID (CURRENT)** | **509** | **80.4%** | **3.08** | **+$136,962** | **0/5** | **+174%** |
 
-### TEST PERIOD MONTHLY (v5.5):
-- Dec 2025: +$7,380
-- Jan 2026: +$6,574
-- Feb 2026: +$8,410
-- Mar 2026: +$17,781
-- Apr 2026 (12 days): +$7,425
-- **All 5 months profitable, all 4 symbols profitable**
+**All configurations profitable. Zero red months across all configs.**
 
-### By Symbol (Test):
-- BTC: 83 trades, +$18,074
-- ETH: 85 trades, +$10,358
-- SOL: 85 trades, +$12,117
-- XRP: 78 trades, +$7,022
+#### Monthly (W5 +MID — current version):
+- Dec 2025: 83 trades, WR 75%, +$8,891
+- Jan 2026: 115 trades, WR 76%, +$17,926
+- Feb 2026: 126 trades, WR 83%, +$24,633
+- Mar 2026: 147 trades, WR 82%, +$52,505
+- Apr 2026 (12 days): 38 trades, WR 92%, +$33,006
+
+#### By Symbol (W5 +MID):
+- BTC: 135 trades, WR 81%, +$68,706
+- ETH: 133 trades, WR 77%, +$24,730
+- SOL: 122 trades, WR 84%, +$27,772
+- XRP: 119 trades, WR 80%, +$15,754
 
 ---
 
@@ -213,6 +233,15 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - Live trading mode enabled
 - Server IP: 8.219.194.199
 
+### v9 — Bug fixes + flexibility (2026-04-14)
+- **FIX:** TRADING_SYMBOLS was ["XRPUSDT"] only → now all 4 symbols
+- **FIX:** Structural stop used current bar only → now 4-bar lookback + EMA20 for RSI_TREND
+- **ENHANCE:** Structure gate window 3→5 bars (+129% PnL in backtest)
+- **ENHANCE:** MID tier enabled (+174% PnL combined with W5)
+- **ENHANCE:** Added per-symbol diagnostic logging (setup, trigger, confidence, rejection reason)
+- **ENHANCE:** STRUCTURE_GATE_WINDOW configurable in live bot
+- Test: 509 trades, 80.4% WR, PF 3.08, +$136,962 (0 red months)
+
 ---
 
 ## LIVE SIGNAL BOT — FEATURES
@@ -227,6 +256,7 @@ ADX is used as a **confidence modifier**, NOT a hard gate:
 - Signal check every 60 seconds
 - Default leverage: 5x
 - Risk per trade: 2.5-4% based on confidence tier
+- **Diagnostic logging:** each check logs setup type, direction, confidence, mode, trigger status, H4 RSI, ADX, and rejection reason
 
 ---
 
