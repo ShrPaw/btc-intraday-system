@@ -48,8 +48,8 @@ BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET", "")
 PAPER_MODE = os.environ.get("PAPER_MODE", "true").lower() == "true"
 
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
-# Only generate signals / allow trades on these symbols (subset of SYMBOLS)
-TRADING_SYMBOLS = ["XRPUSDT"]
+# Generate signals on ALL symbols (was XRP-only, which killed 75% of signals)
+TRADING_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
 
 ROLLING_WINDOW = 10080  # 7 days of 1m candles
 CHECK_INTERVAL = 60
@@ -699,10 +699,42 @@ def check_for_signals():
         try:
             analysis = build_analysis(symbol)
             if analysis is None:
+                log.debug(f"[{symbol}] No analysis (not enough data)")
                 continue
 
             latest = analysis.iloc[-1]
-            if not bool(latest.get("take_trade", False)):
+
+            # ── Diagnostic logging (every check cycle) ──
+            setup = str(latest.get("setup_type", "none"))
+            conf = float(latest.get("confidence_raw", 0))
+            mode = str(latest.get("confidence_mode", "NO_TRADE"))
+            trigger = bool(latest.get("trigger_ok", False))
+            take = bool(latest.get("take_trade", False))
+            h4_rsi = float(latest.get("h4_rsi", 0))
+            h4_adx = float(latest.get("h4_adx", 0)) if pd.notna(latest.get("h4_adx")) else 0
+            dir_val = int(latest.get("direction", 0))
+
+            if setup != "none":
+                reason = ""
+                if not trigger:
+                    reason = "NO_TRIGGER (EMA reclaim + BOS not aligned in 3 bars)"
+                elif mode == "NO_TRADE":
+                    reason = f"LOW_CONF ({conf:.1%} < 0.72 threshold)"
+                elif mode not in ALLOWED_MODES:
+                    reason = f"MODE_BLOCKED ({mode} not in {ALLOWED_MODES})"
+                else:
+                    reason = "PASS"
+
+                log.info(
+                    f"[{symbol}] setup={setup} dir={'LONG' if dir_val==1 else 'SHORT' if dir_val==-1 else '?'} "
+                    f"conf={conf:.1%} mode={mode} trigger={'✓' if trigger else '✗'} "
+                    f"H4_RSI={h4_rsi:.1f} ADX={h4_adx:.1f} → {reason}"
+                )
+            else:
+                # Only log periodically to avoid spam (every ~10 min for idle symbols)
+                log.debug(f"[{symbol}] No setup — H4_RSI={h4_rsi:.1f} ADX={h4_adx:.1f}")
+
+            if not take:
                 continue
 
             ts = str(latest["timestamp"])
