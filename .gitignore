@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 live_bot.log
+venv/
+setup_validation_output_v*.txt
