@@ -1606,15 +1606,19 @@ def main():
     start_time = datetime.now()
     print("=" * 100)
     print("  SETUP VALIDATION ENGINE")
-    print("  Replaces equity backtester with setup quality measurement")
+    print("  Primary validation: BTCUSDT only")
+    print("  Multi-symbol: secondary robustness checks")
     print(f"  Date: {start_time.strftime('%Y-%m-%d %H:%M')}")
     print("=" * 100)
 
     # Phase 1: Audit table
     print_audit_table()
 
-    all_results = []
-    all_baselines = {}
+    # ─────────────────────────────────────────────────────
+    # Collect per-symbol results separately
+    # ─────────────────────────────────────────────────────
+    symbol_results = {}   # symbol → {"train": df, "test": df}
+    symbol_baselines = {} # symbol → baselines dict
 
     for symbol in SYMBOLS:
         data_path = f"data/features/{symbol.lower()}_1m.csv"
@@ -1622,187 +1626,236 @@ def main():
             print(f"\n  [SKIP] {symbol}: {data_path} not found")
             continue
 
+        label = "PRIMARY" if symbol == "BTCUSDT" else "ROBUSTNESS"
         print(f"\n{'─' * 80}")
-        print(f"  Processing {symbol}")
+        print(f"  [{label}] Processing {symbol}")
         print(f"{'─' * 80}")
 
         df = build_master_dataset(data_path)
 
-        # Basic stats
         total_bars = len(df)
         setups = (df["setup_type"] != "none").sum()
         triggered = ((df["setup_type"] != "none") & df["trigger_ok"]).sum()
         tradeable = df["take_trade"].sum()
         print(f"    Bars: {total_bars:,} | Setups: {setups:,} | Triggered: {triggered:,} | Tradeable: {tradeable:,}")
 
-        # Walk-forward split
         df_train = df[df["timestamp"] < TRAIN_CUTOFF].copy()
         df_test = df[df["timestamp"] >= TRAIN_CUTOFF].copy()
 
-        # Validate train
-        print(f"\n  TRAIN period ({df_train['timestamp'].min().strftime('%Y-%m-%d')} → {df_train['timestamp'].max().strftime('%Y-%m-%d')}):")
+        print(f"\n  TRAIN ({df_train['timestamp'].min().strftime('%Y-%m-%d')} → {df_train['timestamp'].max().strftime('%Y-%m-%d')}):")
         train_results = run_validation(df_train, symbol)
         if len(train_results) > 0:
             train_results["period"] = "TRAIN"
-            all_results.append(train_results)
-            print(f"    Validated: {len(train_results)} setups")
             tm = compute_group_metrics(train_results)
-            print(f"    Hit 1R: {tm['pct_hit_1R']:.1%} | Hit 2R: {tm['pct_hit_2R']:.1%} | Exp1R: {tm['expectancy_1R']:+.3f}")
+            print(f"    {len(train_results)} setups | Hit 1R: {tm['pct_hit_1R']:.1%} | Exp1R: {tm['expectancy_1R']:+.3f}")
         else:
-            print(f"    No qualifying setups")
+            train_results = pd.DataFrame()
 
-        # Validate test
-        print(f"\n  TEST period ({df_test['timestamp'].min().strftime('%Y-%m-%d')} → {df_test['timestamp'].max().strftime('%Y-%m-%d')}):")
+        print(f"\n  TEST ({df_test['timestamp'].min().strftime('%Y-%m-%d')} → {df_test['timestamp'].max().strftime('%Y-%m-%d')}):")
         test_results = run_validation(df_test, symbol)
         if len(test_results) > 0:
             test_results["period"] = "TEST"
-            all_results.append(test_results)
-            print(f"    Validated: {len(test_results)} setups")
             ttm = compute_group_metrics(test_results)
-            print(f"    Hit 1R: {ttm['pct_hit_1R']:.1%} | Hit 2R: {ttm['pct_hit_2R']:.1%} | Exp1R: {ttm['expectancy_1R']:+.3f}")
+            print(f"    {len(test_results)} setups | Hit 1R: {ttm['pct_hit_1R']:.1%} | Exp1R: {ttm['expectancy_1R']:+.3f}")
         else:
-            print(f"    No qualifying setups")
+            test_results = pd.DataFrame()
 
-        # Phase 9: Random baselines (on test period)
+        symbol_results[symbol] = {"train": train_results, "test": test_results}
+
+        # Baselines on test period
         if len(test_results) > 0:
-            print(f"\n  Building random baselines for {symbol}...")
+            print(f"\n  Building baselines for {symbol}...")
             baselines = build_random_baselines(test_results, df_test, symbol)
-            all_baselines[symbol] = baselines
+            symbol_baselines[symbol] = baselines
 
-    # Combine all results
-    if not all_results:
-        print("\n  No results to report.")
+    # ═══════════════════════════════════════════════════════
+    # PRIMARY VALIDATION — BTCUSDT ONLY
+    # ═══════════════════════════════════════════════════════
+    btc_train = symbol_results.get("BTCUSDT", {}).get("train", pd.DataFrame())
+    btc_test = symbol_results.get("BTCUSDT", {}).get("test", pd.DataFrame())
+    btc_all = pd.concat([btc_train, btc_test], ignore_index=True) if len(btc_train) > 0 or len(btc_test) > 0 else pd.DataFrame()
+    btc_baselines = symbol_baselines.get("BTCUSDT", {})
+
+    print(f"\n\n{'═' * 100}")
+    print(f"  ██████████████████████████████████████████████████████████████████████████████████████")
+    print(f"  ██  PRIMARY VALIDATION — BTCUSDT ONLY                                           ██")
+    print(f"  ██████████████████████████████████████████████████████████████████████████████████████")
+    print(f"{'═' * 100}")
+
+    if len(btc_all) == 0:
+        print("\n  [ERROR] No BTCUSDT results. Cannot validate.")
         return
 
-    combined = pd.concat(all_results, ignore_index=True)
-    combined_train = combined[combined["period"] == "TRAIN"]
-    combined_test = combined[combined["period"] == "TEST"]
+    # BTC overall
+    btc_stats_all = compute_group_metrics(btc_all)
+    print(f"\n  BTCUSDT ALL PERIODS: {btc_stats_all['count']} setups")
+    print(f"    Hit 1R: {btc_stats_all['pct_hit_1R']:.1%} | Hit 2R: {btc_stats_all['pct_hit_2R']:.1%} | Hit 3R: {btc_stats_all['pct_hit_3R']:.1%}")
+    print(f"    Exp 1R: {btc_stats_all['expectancy_1R']:+.3f} | Exp 2R: {btc_stats_all['expectancy_2R']:+.3f} | Exp 3R: {btc_stats_all['expectancy_3R']:+.3f}")
+    print(f"    Ambiguity: {btc_stats_all['ambiguous_rate']:.1%} | Expired: {btc_stats_all['expiration_rate']:.1%}")
 
-    # ═══════════════════════════════════════════════════════
-    # PHASE 7: REQUIRED METRICS (all groupings)
-    # ═══════════════════════════════════════════════════════
-    print(f"\n\n{'═' * 100}")
-    print(f"  PHASE 7: SETUP QUALITY METRICS — ALL PERIODS")
-    print(f"{'═' * 100}")
+    # BTC test period (headline)
+    if len(btc_test) > 0:
+        btc_stats_test = compute_group_metrics(btc_test)
+        print(f"\n  BTCUSDT TEST PERIOD (HEADLINE): {btc_stats_test['count']} setups")
+        print(f"    Hit 1R: {btc_stats_test['pct_hit_1R']:.1%} | Hit 2R: {btc_stats_test['pct_hit_2R']:.1%} | Hit 3R: {btc_stats_test['pct_hit_3R']:.1%}")
+        print(f"    Exp 1R: {btc_stats_test['expectancy_1R']:+.3f} | Exp 2R: {btc_stats_test['expectancy_2R']:+.3f} | Exp 3R: {btc_stats_test['expectancy_3R']:+.3f}")
+        print(f"    Median MFE: {btc_stats_test['median_MFE_R']:.2f}R | Median MAE: {btc_stats_test['median_MAE_R']:.2f}R")
 
-    total_stats = compute_group_metrics(combined)
-    print(f"\n  OVERALL: {total_stats['count']} setups across {len(SYMBOLS)} symbols")
-    print(f"    Hit 1R: {total_stats['pct_hit_1R']:.1%} | Hit 2R: {total_stats['pct_hit_2R']:.1%} | Hit 3R: {total_stats['pct_hit_3R']:.1%} | Hit 4R: {total_stats['pct_hit_4R']:.1%}")
-    print(f"    Exp 1R: {total_stats['expectancy_1R']:+.3f} | Exp 2R: {total_stats['expectancy_2R']:+.3f} | Exp 3R: {total_stats['expectancy_3R']:+.3f}")
-
-    all_metrics = compute_all_metrics(combined)
-    for group_name, groups in all_metrics.items():
-        print_metrics_table(f"BY {group_name.upper()}", groups)
-
-    # Test period only
-    if len(combined_test) > 0:
-        print(f"\n\n{'═' * 100}")
-        print(f"  TEST PERIOD ONLY (Dec 2025 - Apr 2026)")
-        print(f"{'═' * 100}")
-        test_metrics = compute_all_metrics(combined_test)
-        for group_name, groups in test_metrics.items():
-            print_metrics_table(f"TEST — BY {group_name.upper()}", groups)
-
-    # ═══════════════════════════════════════════════════════
-    # PHASE 8: EXPECTANCY SUMMARY
-    # ═══════════════════════════════════════════════════════
-    print(f"\n\n{'═' * 100}")
-    print(f"  PHASE 8: EXPECTANCY IN R — SUMMARY")
-    print(f"{'═' * 100}")
-
-    exp_groups = {}
-    for mode in ["MILD", "MID", "HIGH", "PREMIUM", "ELITE"]:
-        sub = combined[combined["confidence_mode"] == mode]
-        if len(sub) > 0:
-            exp_groups[mode] = compute_group_metrics(sub)
+    # BTC by direction
+    print(f"\n  BTCUSDT BY DIRECTION:")
     for d in ["LONG", "SHORT"]:
-        sub = combined[combined["dir_label"] == d]
-        if len(sub) > 0:
-            exp_groups[d] = compute_group_metrics(sub)
-    for dc in ["LONG/MILD", "LONG/MID", "LONG/HIGH", "SHORT/MILD", "SHORT/MID", "SHORT/HIGH"]:
-        d, c = dc.split("/")
-        sub = combined[(combined["dir_label"] == d) & (combined["confidence_mode"] == c)]
-        if len(sub) > 0:
-            exp_groups[dc] = compute_group_metrics(sub)
+        sub_all = btc_all[btc_all["dir_label"] == d]
+        m_all = compute_group_metrics(sub_all)
+        if m_all:
+            sub_test = btc_test[btc_test["dir_label"] == d] if len(btc_test) > 0 else pd.DataFrame()
+            m_test = compute_group_metrics(sub_test) if len(sub_test) > 0 else None
+            test_str = f" | TEST: {m_test['count']} setups, Exp1R={m_test['expectancy_1R']:+.3f}" if m_test else ""
+            print(f"    {d}: {m_all['count']} setups | Exp1R={m_all['expectancy_1R']:+.3f} | Hit1R={m_all['pct_hit_1R']:.1%}{test_str}")
 
-    print(f"\n  {'Group':<20s} {'N':>5s} {'Exp1R':>8s} {'Exp2R':>8s} {'Exp3R':>8s} {'1R%':>6s} {'2R%':>6s} {'3R%':>6s}")
-    print(f"  {'-'*20}-{'-'*5}-{'-'*8}-{'-'*8}-{'-'*8}-{'-'*6}-{'-'*6}-{'-'*6}")
-    for name, m in exp_groups.items():
-        if m is None:
-            continue
-        print(
-            f"  {name:<20s} {m['count']:>5d} "
-            f"{m['expectancy_1R']:>+7.3f} {m['expectancy_2R']:>+7.3f} {m['expectancy_3R']:>+7.3f} "
-            f"{m['pct_hit_1R']:>5.1%} {m['pct_hit_2R']:>5.1%} {m['pct_hit_3R']:>5.1%}"
-        )
+    # BTC by confidence
+    print(f"\n  BTCUSDT BY CONFIDENCE TIER:")
+    for mode in ["MILD", "MID", "HIGH", "PREMIUM", "ELITE"]:
+        sub_all = btc_all[btc_all["confidence_mode"] == mode]
+        m_all = compute_group_metrics(sub_all)
+        if m_all:
+            sub_test = btc_test[btc_test["confidence_mode"] == mode] if len(btc_test) > 0 else pd.DataFrame()
+            m_test = compute_group_metrics(sub_test) if len(sub_test) > 0 else None
+            test_str = f" | TEST: {m_test['count']}, Exp1R={m_test['expectancy_1R']:+.3f}" if m_test else ""
+            print(f"    {mode:<10s}: {m_all['count']:>3d} setups | Exp1R={m_all['expectancy_1R']:+.3f} | Hit1R={m_all['pct_hit_1R']:.1%}{test_str}")
+
+    # BTC by direction+confidence
+    print(f"\n  BTCUSDT BY DIRECTION+CONFIDENCE:")
+    for d in ["LONG", "SHORT"]:
+        for mode in ["MILD", "MID", "HIGH", "PREMIUM"]:
+            sub_all = btc_all[(btc_all["dir_label"] == d) & (btc_all["confidence_mode"] == mode)]
+            m_all = compute_group_metrics(sub_all)
+            if m_all and m_all["count"] >= 3:
+                sub_test = btc_test[(btc_test["dir_label"] == d) & (btc_test["confidence_mode"] == mode)] if len(btc_test) > 0 else pd.DataFrame()
+                m_test = compute_group_metrics(sub_test) if len(sub_test) > 0 else None
+                test_str = f" | TEST: {m_test['count']}, Exp1R={m_test['expectancy_1R']:+.3f}" if m_test else ""
+                print(f"    {d}/{mode:<8s}: {m_all['count']:>3d} setups | Exp1R={m_all['expectancy_1R']:+.3f} | Hit1R={m_all['pct_hit_1R']:.1%}{test_str}")
+
+    # BTC by month
+    print(f"\n  BTCUSDT BY MONTH:")
+    for month in sorted(btc_all["month"].unique()):
+        sub = btc_all[btc_all["month"] == month]
+        m = compute_group_metrics(sub)
+        if m:
+            print(f"    {month}: {m['count']:>3d} setups | Hit1R={m['pct_hit_1R']:.1%} | Exp1R={m['expectancy_1R']:+.3f}")
+
+    # BTC by regime
+    print(f"\n  BTCUSDT BY HTF REGIME:")
+    for regime in ["bullish", "bearish", "neutral"]:
+        sub = btc_all[btc_all["htf_regime"] == regime]
+        m = compute_group_metrics(sub)
+        if m:
+            print(f"    {regime:<10s}: {m['count']:>3d} setups | Hit1R={m['pct_hit_1R']:.1%} | Exp1R={m['expectancy_1R']:+.3f}")
+
+    # BTC by session
+    print(f"\n  BTCUSDT BY SESSION:")
+    for session in ["Asian", "European", "US"]:
+        sub = btc_all[btc_all["session"] == session]
+        m = compute_group_metrics(sub)
+        if m:
+            print(f"    {session:<10s}: {m['count']:>3d} setups | Hit1R={m['pct_hit_1R']:.1%} | Exp1R={m['expectancy_1R']:+.3f}")
+
+    # BTC baseline comparison (headline)
+    if btc_baselines:
+        print(f"\n  {'─' * 80}")
+        print(f"  BTCUSDT BASELINE COMPARISON (TEST PERIOD)")
+        print(f"  {'─' * 80}")
+        btc_sys = compute_group_metrics(btc_test) if len(btc_test) > 0 else None
+        if btc_sys:
+            print(f"\n  {'Baseline':<35s} {'N':>5s} {'1R%':>6s} {'Exp1R':>8s} {'Exp2R':>8s} {'MedMFE':>7s} {'Edge':>8s}")
+            print(f"  {'─'*35} {'─'*5} {'─'*6} {'─'*8} {'─'*8} {'─'*7} {'─'*8}")
+            print(f"  {'BTCUSDT (system)':<35s} {btc_sys['count']:>5d} {btc_sys['pct_hit_1R']:>5.1%} {btc_sys['expectancy_1R']:>+7.3f}R {btc_sys['expectancy_2R']:>+7.3f}R {btc_sys['median_MFE_R']:>6.2f}R")
+            for bl_name, bl_df in btc_baselines.items():
+                bl_m = compute_group_metrics(bl_df)
+                if bl_m:
+                    edge = btc_sys["expectancy_1R"] - bl_m["expectancy_1R"]
+                    print(f"  {bl_name:<35s} {bl_m['count']:>5d} {bl_m['pct_hit_1R']:>5.1%} {bl_m['expectancy_1R']:>+7.3f}R {bl_m['expectancy_2R']:>+7.3f}R {bl_m['median_MFE_R']:>6.2f}R {edge:>+7.3f}R")
 
     # ═══════════════════════════════════════════════════════
-    # PHASE 9: BASELINE COMPARISON
+    # SECONDARY — MULTI-SYMBOL ROBUSTNESS
     # ═══════════════════════════════════════════════════════
-    print(f"\n\n{'═' * 100}")
-    print(f"  PHASE 9: RANDOM BASELINE COMPARISON")
-    print(f"{'═' * 100}")
+    other_symbols = [s for s in SYMBOLS if s != "BTCUSDT" and s in symbol_results]
+    if other_symbols:
+        print(f"\n\n{'═' * 100}")
+        print(f"  SECONDARY — MULTI-SYMBOL ROBUSTNESS CHECKS")
+        print(f"  These results test cross-asset consistency. They do NOT establish edge.")
+        print(f"{'═' * 100}")
 
-    # Combine baselines across symbols
-    all_bl_names = ["full_dataset_random", "same_time_random_dir", "same_regime_random_time",
-                    "same_dir_dist", "same_holding_window", "same_session_random_time"]
-    for bl_name in all_bl_names:
-        combined_bl = []
-        for symbol, bls in all_baselines.items():
-            if bl_name in bls:
-                combined_bl.append(bls[bl_name])
-        if combined_bl:
-            bl_all = pd.concat(combined_bl, ignore_index=True)
-            print(f"\n  Baseline: {bl_name}")
-            bl_m = compute_group_metrics(bl_all)
-            sys_m = compute_group_metrics(combined_test if len(combined_test) > 0 else combined)
-            if bl_m and sys_m:
-                print(f"    System:  {sys_m['count']:>5d} setups | 1R: {sys_m['pct_hit_1R']:.1%} | Exp1R: {sys_m['expectancy_1R']:+.3f} | Exp2R: {sys_m['expectancy_2R']:+.3f}")
-                print(f"    Random:  {bl_m['count']:>5d} setups | 1R: {bl_m['pct_hit_1R']:.1%} | Exp1R: {bl_m['expectancy_1R']:+.3f} | Exp2R: {bl_m['expectancy_2R']:+.3f}")
-                edge_1R = sys_m["expectancy_1R"] - bl_m["expectancy_1R"]
-                print(f"    Edge over random (Exp1R): {edge_1R:+.3f}")
+        # Per-symbol summary table
+        print(f"\n  {'Symbol':<12s} {'Period':<8s} {'N':>5s} {'1R%':>6s} {'2R%':>6s} {'Exp1R':>8s} {'Exp2R':>8s} {'MedMFE':>7s} {'Amb%':>5s}")
+        print(f"  {'─'*12} {'─'*8} {'─'*5} {'─'*6} {'─'*6} {'─'*8} {'─'*8} {'─'*7} {'─'*5}")
 
-    # Full baseline comparison table
-    all_bl_combined = {}
-    for bl_name in all_bl_names:
-        combined_bl = []
-        for symbol, bls in all_baselines.items():
-            if bl_name in bls:
-                combined_bl.append(bls[bl_name])
-        if combined_bl:
-            all_bl_combined[bl_name] = pd.concat(combined_bl, ignore_index=True)
-    print_baseline_comparison(combined_test if len(combined_test) > 0 else combined, all_bl_combined)
+        # BTC first
+        if len(btc_test) > 0:
+            m = compute_group_metrics(btc_test)
+            print(f"  {'BTCUSDT':<12s} {'TEST':<8s} {m['count']:>5d} {m['pct_hit_1R']:>5.1%} {m['pct_hit_2R']:>5.1%} {m['expectancy_1R']:>+7.3f}R {m['expectancy_2R']:>+7.3f}R {m['median_MFE_R']:>6.2f}R {m['ambiguous_rate']:>4.1%}")
 
-    # ═══════════════════════════════════════════════════════
-    # PHASE 10: SHORT FOCUS
-    # ═══════════════════════════════════════════════════════
-    analyze_short_setups(combined)
-    if len(combined_test) > 0:
-        print(f"\n  {'─' * 60}")
-        print(f"  SHORT ANALYSIS — TEST PERIOD ONLY")
-        print(f"  {'─' * 60}")
-        analyze_short_setups(combined_test)
+        # Others
+        for symbol in other_symbols:
+            sr = symbol_results[symbol]
+            for period_name, period_df in [("TRAIN", sr["train"]), ("TEST", sr["test"])]:
+                if len(period_df) > 0:
+                    m = compute_group_metrics(period_df)
+                    print(f"  {symbol:<12s} {period_name:<8s} {m['count']:>5d} {m['pct_hit_1R']:>5.1%} {m['pct_hit_2R']:>5.1%} {m['expectancy_1R']:>+7.3f}R {m['expectancy_2R']:>+7.3f}R {m['median_MFE_R']:>6.2f}R {m['ambiguous_rate']:>4.1%}")
 
-    # ═══════════════════════════════════════════════════════
-    # PHASE 11: SAMPLE SIGNALS
-    # ═══════════════════════════════════════════════════════
-    print_sample_signals(combined, n=5)
+        # Robustness baseline comparison per symbol
+        print(f"\n  PER-SYMBOL BASELINE COMPARISON (TEST PERIOD):")
+        for symbol in ["BTCUSDT"] + other_symbols:
+            if symbol not in symbol_baselines or not symbol_baselines[symbol]:
+                continue
+            sr = symbol_results[symbol]
+            test_df = sr["test"]
+            if len(test_df) == 0:
+                continue
+            sys_m = compute_group_metrics(test_df)
+            print(f"\n    {symbol}: {sys_m['count']} setups | System Exp1R={sys_m['expectancy_1R']:+.3f}")
+            for bl_name, bl_df in symbol_baselines[symbol].items():
+                bl_m = compute_group_metrics(bl_df)
+                if bl_m:
+                    edge = sys_m["expectancy_1R"] - bl_m["expectancy_1R"]
+                    print(f"      {bl_name:<30s}: N={bl_m['count']:>4d} | Exp1R={bl_m['expectancy_1R']:+.3f} | Edge={edge:+.3f}")
+
+        # Combined basket (clearly labeled)
+        all_test_frames = []
+        for symbol in SYMBOLS:
+            if symbol in symbol_results and len(symbol_results[symbol]["test"]) > 0:
+                all_test_frames.append(symbol_results[symbol]["test"])
+        if all_test_frames:
+            basket_test = pd.concat(all_test_frames, ignore_index=True)
+            basket_m = compute_group_metrics(basket_test)
+            print(f"\n  {'─' * 80}")
+            print(f"  BASKET (ALL SYMBOLS COMBINED) — ROBUSTNESS ONLY, NOT HEADLINE")
+            print(f"  {'─' * 80}")
+            print(f"    {basket_m['count']} setups | Hit1R={basket_m['pct_hit_1R']:.1%} | Exp1R={basket_m['expectancy_1R']:+.3f} | Exp2R={basket_m['expectancy_2R']:+.3f}")
 
     # ═══════════════════════════════════════════════════════
     # SAVE RESULTS
     # ═══════════════════════════════════════════════════════
-    output_path = "data/features/setup_validation_results.csv"
-    combined.to_csv(output_path, index=False)
-    print(f"\n  [SAVED] {output_path} ({len(combined)} setups)")
+    all_frames = []
+    for symbol in SYMBOLS:
+        if symbol in symbol_results:
+            for period_df in [symbol_results[symbol]["train"], symbol_results[symbol]["test"]]:
+                if len(period_df) > 0:
+                    all_frames.append(period_df)
+    if all_frames:
+        combined = pd.concat(all_frames, ignore_index=True)
+        output_path = "data/features/setup_validation_results.csv"
+        combined.to_csv(output_path, index=False)
+        print(f"\n  [SAVED] {output_path} ({len(combined)} setups)")
 
     # Summary
     elapsed = (datetime.now() - start_time).total_seconds()
     print(f"\n{'═' * 100}")
     print(f"  SETUP VALIDATION ENGINE COMPLETE")
-    print(f"  Time: {elapsed:.1f}s | Setups: {len(combined)} | Symbols: {len(SYMBOLS)}")
+    print(f"  Time: {elapsed:.1f}s | Primary: BTCUSDT | Robustness: {len(other_symbols)} other symbols")
     print(f"{'═' * 100}")
 
-    return combined
+    if all_frames:
+        return pd.concat(all_frames, ignore_index=True)
 
 
 if __name__ == "__main__":
