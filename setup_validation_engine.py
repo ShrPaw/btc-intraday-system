@@ -887,11 +887,13 @@ def run_validation(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
         result["month"] = signal_time.strftime("%Y-%m")
         result["hour_utc"] = hour
 
-        # Short focus fields
+        # HTF fields for all directions (used for regime filtering)
+        result["h4_rsi_entry"] = h4_rsi
+        result["h6_rsi_entry"] = float(row.get("h6_rsi", 50))
+        result["h12_rsi_entry"] = float(row.get("h12_rsi", 50))
+
+        # Short-specific fields
         if direction == -1:
-            result["h4_rsi_entry"] = h4_rsi
-            result["h6_rsi_entry"] = float(row.get("h6_rsi", 50))
-            result["h12_rsi_entry"] = float(row.get("h12_rsi", 50))
             result["price_vs_ema20"] = float(row.get("ema_dist_pct", 0))
             result["ema20_val"] = float(row.get("ema20", 0))
             result["ema50_val"] = float(row.get("ema50", 0))
