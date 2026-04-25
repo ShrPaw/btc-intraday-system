@@ -707,80 +707,66 @@ def track_setup_outcome(df: pd.DataFrame, entry_idx: int, direction: int,
         max_favorable = max(max_favorable, favorable)
         max_adverse = max(max_adverse, adverse)
 
-        # Check TP levels hit
-        for n in TP_R_MULTIPLES:
-            tp_p = tp_prices[n]
-            if direction == 1:
-                tp_touched = high >= tp_p
-            else:
-                tp_touched = low <= tp_p
+        # ──────────────────────────────────────────────────────
+        # FIX P0-1: Check SL FIRST, then TP. If both touched in
+        # the same candle, SL wins. TP must NOT count as hit.
+        # ──────────────────────────────────────────────────────
 
-            if tp_touched:
-                if n == 1 and not hit_1R:
-                    hit_1R = True
-                    time_to_1R = j - entry_idx
-                elif n == 2 and not hit_2R:
-                    hit_2R = True
-                    time_to_2R = j - entry_idx
-                elif n == 3 and not hit_3R:
-                    hit_3R = True
-                    time_to_3R = j - entry_idx
-                elif n == 4 and not hit_4R:
-                    hit_4R = True
-                    time_to_4R = j - entry_idx
-
-        # Check SL
+        # Step 1: Determine if SL is touched on this bar
         if direction == 1:
             sl_touched = low <= stop_price
         else:
             sl_touched = high >= stop_price
 
+        # Step 2: If SL touched, check for same-candle TP ambiguity
         if sl_touched and not sl_hit:
             sl_hit = True
             time_to_SL = j - entry_idx
 
-        # Phase 6: Worst-case intracandle — check ambiguity
-        # If both SL and any TP touched in same candle, SL wins
-        if direction == 1:
-            if low <= stop_price:
-                if high >= tp_prices[1] and not hit_1R:
-                    ambiguous_1R = True
-                    hit_1R = True
-                    time_to_1R = j - entry_idx
-                if high >= tp_prices[2] and not hit_2R:
-                    ambiguous_2R = True
-                    hit_2R = True
-                    time_to_2R = j - entry_idx
-                if high >= tp_prices[3] and not hit_3R:
-                    ambiguous_3R = True
-                    hit_3R = True
-                    time_to_3R = j - entry_idx
-                if high >= tp_prices[4] and not hit_4R:
-                    ambiguous_4R = True
-                    hit_4R = True
-                    time_to_4R = j - entry_idx
-        else:
-            if high >= stop_price:
-                if low <= tp_prices[1] and not hit_1R:
-                    ambiguous_1R = True
-                    hit_1R = True
-                    time_to_1R = j - entry_idx
-                if low <= tp_prices[2] and not hit_2R:
-                    ambiguous_2R = True
-                    hit_2R = True
-                    time_to_2R = j - entry_idx
-                if low <= tp_prices[3] and not hit_3R:
-                    ambiguous_3R = True
-                    hit_3R = True
-                    time_to_3R = j - entry_idx
-                if low <= tp_prices[4] and not hit_4R:
-                    ambiguous_4R = True
-                    hit_4R = True
-                    time_to_4R = j - entry_idx
+            # Check if any TP was also touched in this same candle
+            # If so, flag ambiguity — TP must NOT count as hit
+            for n in TP_R_MULTIPLES:
+                tp_p = tp_prices[n]
+                if direction == 1:
+                    tp_also_touched = high >= tp_p
+                else:
+                    tp_also_touched = low <= tp_p
 
-        # Once SL is hit, stop tracking
-        if sl_hit:
+                if tp_also_touched:
+                    if n == 1 and not hit_1R:
+                        ambiguous_1R = True
+                        # Do NOT set hit_1R — SL wins
+                    elif n == 2 and not hit_2R:
+                        ambiguous_2R = True
+                    elif n == 3 and not hit_3R:
+                        ambiguous_3R = True
+                    elif n == 4 and not hit_4R:
+                        ambiguous_4R = True
+            # SL occurred — stop tracking
             break
+
+        # Step 3: Only check TP if SL was NOT touched on this bar
+        if not sl_touched:
+            for n in TP_R_MULTIPLES:
+                tp_p = tp_prices[n]
+                if direction == 1:
+                    tp_touched = high >= tp_p
+                else:
+                    tp_touched = low <= tp_p
+
+                if tp_touched:
+                    if n == 1 and not hit_1R:
+                        hit_1R = True
+                        time_to_1R = j - entry_idx
+                    elif n == 2 and not hit_2R:
+                        hit_2R = True
+                        time_to_2R = j - entry_idx
+                    elif n == 3 and not hit_3R:
+                        hit_3R = True
+                        time_to_3R = j - entry_idx
+                    elif n == 4 and not hit_4R:
+                        hit_4R = True
+                        time_to_4R = j - entry_idx
 
     expired = not sl_hit and not hit_1R
 
@@ -1080,42 +1066,105 @@ def compute_all_metrics(results: pd.DataFrame) -> dict:
 
 def build_random_baselines(results: pd.DataFrame, df: pd.DataFrame,
                            symbol: str) -> dict:
-    """Build 4 random baselines to test if edge is real."""
+    """Build random baselines to test if edge is real.
+    FIX P0-2: Reset index so positional indexing matches label indexing.
+    Also adds full-dataset and same-session baselines."""
     baselines = {}
     rng = np.random.RandomState(42 + hash(symbol) % 10000)
 
+    # FIX: Reset index so iloc positions match index labels
+    df = df.reset_index(drop=True).copy()
+    n_bars = len(df)
+
+    # All bars with setup_type (strategy's filtered universe)
     tradeable_indices = df[df["setup_type"] != "none"].index.tolist()
-    if len(tradeable_indices) < 100:
+    if len(tradeable_indices) < 50:
+        print(f"    [SKIP] {symbol}: only {len(tradeable_indices)} tradeable bars")
         return baselines
 
     n_setups = len(results)
     if n_setups == 0:
         return baselines
 
+    # Helper: run one random entry through outcome tracking
+    def _run_one(sig_idx, rand_dir, setup_type):
+        entry_idx = sig_idx + 1
+        if entry_idx >= n_bars:
+            return None
+        entry_price = float(df.iloc[entry_idx]["open"])
+        stop_info = compute_structural_stop(df, sig_idx, rand_dir, setup_type)
+        if not stop_info["is_stop_valid"]:
+            return None
+        stop_price = stop_info["stop_price"]
+        tp_levels = compute_tp_levels(entry_price, stop_price, rand_dir)
+        tp_levels["entry_price"] = entry_price
+        outcome = track_setup_outcome(df, entry_idx, rand_dir, stop_price, tp_levels)
+        if not outcome.get("valid", False):
+            return None
+        r = {
+            "direction": rand_dir,
+            "dir_label": "LONG" if rand_dir == 1 else "SHORT",
+            "setup_type": setup_type,
+        }
+        r.update({k: v for k, v in outcome.items() if k != "valid"})
+        return r
+
+    # ─────────────────────────────────────────────────────
+    # Baseline 0: Full-dataset random (any valid bar)
+    # ─────────────────────────────────────────────────────
+    bl0_results = []
+    bl0_attempted = 0
+    bl0_skipped = 0
+    # Exclude early bars without enough indicator history
+    min_start = 500
+    valid_bars = list(range(min_start, n_bars - 1))  # -1 because we need next open
+    sample_size = min(n_setups * 4, len(valid_bars))
+    sampled = rng.choice(valid_bars, size=sample_size, replace=False)
+    for sig_idx in sampled:
+        bl0_attempted += 1
+        rand_dir = rng.choice([1, -1])
+        r = _run_one(sig_idx, rand_dir, "RSI_SCALP")
+        if r is None:
+            bl0_skipped += 1
+            continue
+        bl0_results.append(r)
+    if bl0_results:
+        baselines["full_dataset_random"] = pd.DataFrame(bl0_results)
+    print(f"    Baseline 0 (full-dataset random): {bl0_attempted} attempted, {bl0_skipped} skipped, {len(bl0_results)} valid")
+
+    # ─────────────────────────────────────────────────────
     # Baseline 1: Same timestamps, random direction
+    # ─────────────────────────────────────────────────────
     bl1_results = []
+    bl1_attempted = 0
+    bl1_skipped = 0
     for _, row in results.iterrows():
+        bl1_attempted += 1
         sig_time = row["signal_time"]
-        # Find the signal index in df
         mask = df["timestamp"] == sig_time
         if not mask.any():
+            bl1_skipped += 1
             continue
-        sig_idx = df.index[mask][0]
+        sig_idx = int(df.index[mask][0])
         entry_idx = sig_idx + 1
-        if entry_idx >= len(df):
+        if entry_idx >= n_bars:
+            bl1_skipped += 1
             continue
 
         rand_dir = rng.choice([1, -1])
         entry_price = float(df.iloc[entry_idx]["open"])
 
-        # Use same stop logic but random direction
         stop_info = compute_structural_stop(df, sig_idx, rand_dir, row["setup_type"])
+        if not stop_info["is_stop_valid"]:
+            bl1_skipped += 1
+            continue
         stop_price = stop_info["stop_price"]
         tp_levels = compute_tp_levels(entry_price, stop_price, rand_dir)
         tp_levels["entry_price"] = entry_price
 
         outcome = track_setup_outcome(df, entry_idx, rand_dir, stop_price, tp_levels)
         if not outcome.get("valid", False):
+            bl1_skipped += 1
             continue
 
         r = {
@@ -1132,96 +1181,129 @@ def build_random_baselines(results: pd.DataFrame, df: pd.DataFrame,
 
     if bl1_results:
         baselines["same_time_random_dir"] = pd.DataFrame(bl1_results)
+    print(f"    Baseline 1 (same-time random-dir): {bl1_attempted} attempted, {bl1_skipped} skipped, {len(bl1_results)} valid")
 
+    # ─────────────────────────────────────────────────────
     # Baseline 2: Same regime, random timestamp
+    # ─────────────────────────────────────────────────────
     bl2_results = []
+    bl2_attempted = 0
+    bl2_skipped = 0
+    # Derive regime from h4_rsi in df (not from setup_type)
+    df["_regime"] = "neutral"
+    if "h4_rsi" in df.columns:
+        df.loc[df["h4_rsi"] > 55, "_regime"] = "bullish"
+        df.loc[df["h4_rsi"] < 45, "_regime"] = "bearish"
+
     regime_map = results.groupby("htf_regime").apply(lambda x: x.index.tolist()).to_dict()
     for regime, indices in regime_map.items():
+        # Sample from ALL bars in this regime, not just setup bars
         regime_bars = df[
-            (df["setup_type"] != "none") &
-            (df.index.isin(tradeable_indices))
+            (df["_regime"] == regime) &
+            (df.index >= 500) &
+            (df.index < n_bars - 1)
         ]
-        if len(regime_bars) < 50:
+        if len(regime_bars) < 20:
             continue
-        # Sample random bars
-        sample_size = min(len(indices), len(regime_bars))
+        sample_size = min(len(indices) * 3, len(regime_bars))
         sampled = regime_bars.sample(n=sample_size, random_state=rng)
         for _, bar in sampled.iterrows():
-            sig_idx = bar.name
-            entry_idx = sig_idx + 1
-            if entry_idx >= len(df):
-                continue
+            bl2_attempted += 1
+            sig_idx = int(bar.name)
             rand_dir = rng.choice([1, -1])
-            entry_price = float(df.iloc[entry_idx]["open"])
-            stop_info = compute_structural_stop(df, sig_idx, rand_dir, bar["setup_type"])
-            stop_price = stop_info["stop_price"]
-            tp_levels = compute_tp_levels(entry_price, stop_price, rand_dir)
-            tp_levels["entry_price"] = entry_price
-            outcome = track_setup_outcome(df, entry_idx, rand_dir, stop_price, tp_levels)
-            if not outcome.get("valid", False):
+            r = _run_one(sig_idx, rand_dir, "RSI_SCALP")
+            if r is None:
+                bl2_skipped += 1
                 continue
-            r = {
-                "direction": rand_dir,
-                "dir_label": "LONG" if rand_dir == 1 else "SHORT",
-                "setup_type": bar["setup_type"],
-                "htf_regime": regime,
-            }
-            r.update({k: v for k, v in outcome.items() if k != "valid"})
+            r["htf_regime"] = regime
             bl2_results.append(r)
 
     if bl2_results:
         baselines["same_regime_random_time"] = pd.DataFrame(bl2_results)
+    print(f"    Baseline 2 (same-regime random-time): {bl2_attempted} attempted, {bl2_skipped} skipped, {len(bl2_results)} valid")
 
+    # ─────────────────────────────────────────────────────
     # Baseline 3: Same direction distribution
+    # ─────────────────────────────────────────────────────
     long_ratio = (results["direction"] == 1).mean()
     bl3_results = []
-    sample_size = min(n_setups, len(tradeable_indices))
-    sampled_indices = rng.choice(tradeable_indices, size=sample_size, replace=False)
+    bl3_attempted = 0
+    bl3_skipped = 0
+    valid_bars_all = list(range(500, n_bars - 1))
+    sample_size = min(n_setups * 3, len(valid_bars_all))
+    sampled_indices = rng.choice(valid_bars_all, size=sample_size, replace=False)
     for sig_idx in sampled_indices:
-        entry_idx = sig_idx + 1
-        if entry_idx >= len(df):
-            continue
+        bl3_attempted += 1
         rand_dir = 1 if rng.random() < long_ratio else -1
-        entry_price = float(df.iloc[entry_idx]["open"])
-        bar = df.iloc[sig_idx]
-        stop_info = compute_structural_stop(df, sig_idx, rand_dir, bar["setup_type"])
-        stop_price = stop_info["stop_price"]
-        tp_levels = compute_tp_levels(entry_price, stop_price, rand_dir)
-        tp_levels["entry_price"] = entry_price
-        outcome = track_setup_outcome(df, entry_idx, rand_dir, stop_price, tp_levels)
-        if not outcome.get("valid", False):
+        r = _run_one(int(sig_idx), rand_dir, "RSI_SCALP")
+        if r is None:
+            bl3_skipped += 1
             continue
-        r = {"direction": rand_dir, "dir_label": "LONG" if rand_dir == 1 else "SHORT"}
-        r.update({k: v for k, v in outcome.items() if k != "valid"})
         bl3_results.append(r)
 
     if bl3_results:
         baselines["same_dir_dist"] = pd.DataFrame(bl3_results)
+    print(f"    Baseline 3 (same-dir-distrib): {bl3_attempted} attempted, {bl3_skipped} skipped, {len(bl3_results)} valid")
 
-    # Baseline 4: Same holding window (random entry, same horizon)
+    # ─────────────────────────────────────────────────────
+    # Baseline 4: Same holding window (random entry)
+    # ─────────────────────────────────────────────────────
     bl4_results = []
-    sample_size = min(n_setups * 2, len(tradeable_indices))
-    sampled_indices = rng.choice(tradeable_indices, size=sample_size, replace=False)
+    bl4_attempted = 0
+    bl4_skipped = 0
+    sample_size = min(n_setups * 3, len(valid_bars_all))
+    sampled_indices = rng.choice(valid_bars_all, size=sample_size, replace=False)
     for sig_idx in sampled_indices:
-        entry_idx = sig_idx + 1
-        if entry_idx >= len(df):
-            continue
+        bl4_attempted += 1
         rand_dir = rng.choice([1, -1])
-        entry_price = float(df.iloc[entry_idx]["open"])
-        bar = df.iloc[sig_idx]
-        stop_info = compute_structural_stop(df, sig_idx, rand_dir, bar["setup_type"])
-        stop_price = stop_info["stop_price"]
-        tp_levels = compute_tp_levels(entry_price, stop_price, rand_dir)
-        tp_levels["entry_price"] = entry_price
-        outcome = track_setup_outcome(df, entry_idx, rand_dir, stop_price, tp_levels)
-        if not outcome.get("valid", False):
+        r = _run_one(int(sig_idx), rand_dir, "RSI_SCALP")
+        if r is None:
+            bl4_skipped += 1
             continue
-        r = {"direction": rand_dir, "dir_label": "LONG" if rand_dir == 1 else "SHORT"}
-        r.update({k: v for k, v in outcome.items() if k != "valid"})
         bl4_results.append(r)
 
     if bl4_results:
         baselines["same_holding_window"] = pd.DataFrame(bl4_results)
+    print(f"    Baseline 4 (same-holding-window): {bl4_attempted} attempted, {bl4_skipped} skipped, {len(bl4_results)} valid")
+
+    # ─────────────────────────────────────────────────────
+    # Baseline 5: Same session, random timestamp
+    # ─────────────────────────────────────────────────────
+    bl5_results = []
+    bl5_attempted = 0
+    bl5_skipped = 0
+    df["_session"] = "US"
+    df.loc[(df["timestamp"].dt.hour >= 0) & (df["timestamp"].dt.hour < 8), "_session"] = "Asian"
+    df.loc[(df["timestamp"].dt.hour >= 8) & (df["timestamp"].dt.hour < 16), "_session"] = "European"
+
+    session_map = results.groupby("session").apply(lambda x: x.index.tolist()).to_dict()
+    for session, indices in session_map.items():
+        session_bars = df[
+            (df["_session"] == session) &
+            (df.index >= 500) &
+            (df.index < n_bars - 1)
+        ]
+        if len(session_bars) < 20:
+            continue
+        sample_size = min(len(indices) * 3, len(session_bars))
+        sampled = session_bars.sample(n=sample_size, random_state=rng)
+        for _, bar in sampled.iterrows():
+            bl5_attempted += 1
+            sig_idx = int(bar.name)
+            rand_dir = rng.choice([1, -1])
+            r = _run_one(sig_idx, rand_dir, "RSI_SCALP")
+            if r is None:
+                bl5_skipped += 1
+                continue
+            r["session"] = session
+            bl5_results.append(r)
+
+    if bl5_results:
+        baselines["same_session_random_time"] = pd.DataFrame(bl5_results)
+    print(f"    Baseline 5 (same-session random-time): {bl5_attempted} attempted, {bl5_skipped} skipped, {len(bl5_results)} valid")
+
+    # Cleanup temp columns
+    df.drop(columns=["_regime", "_session"], inplace=True, errors="ignore")
 
     return baselines
 
@@ -1662,7 +1744,9 @@ def main():
     print(f"{'═' * 100}")
 
     # Combine baselines across symbols
-    for bl_name in ["same_time_random_dir", "same_regime_random_time", "same_dir_dist", "same_holding_window"]:
+    all_bl_names = ["full_dataset_random", "same_time_random_dir", "same_regime_random_time",
+                    "same_dir_dist", "same_holding_window", "same_session_random_time"]
+    for bl_name in all_bl_names:
         combined_bl = []
         for symbol, bls in all_baselines.items():
             if bl_name in bls:
@@ -1680,7 +1764,7 @@ def main():
 
     # Full baseline comparison table
     all_bl_combined = {}
-    for bl_name in ["same_time_random_dir", "same_regime_random_time", "same_dir_dist", "same_holding_window"]:
+    for bl_name in all_bl_names:
         combined_bl = []
         for symbol, bls in all_baselines.items():
             if bl_name in bls:
