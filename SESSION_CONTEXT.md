@@ -1,5 +1,5 @@
 # BTC Intraday System — Session Context
-## Last Updated: 2026-04-26 07:40 GMT+8
+## Last Updated: 2026-04-26 07:52 GMT+8
 
 ---
 
@@ -163,14 +163,28 @@ All 13 LONG test setups already in bullish HTF. Filter adds nothing.
 
 ---
 
+## WHAT HAS BEEN TESTED (session 2 additions)
+
+| Test | Result | File |
+|------|--------|------|
+| BOS quality filter for LONGs | NEGATIVE — doesn't improve LONGs | bos_quality_filter_test.py |
+| BOS quality filter for SHORTs | POSITIVE — +0.467R at ≥0.60 floor | bos_quality_filter_test.py |
+| LONG sample expansion (4 symbols) | 88 setups, +0.273R combined | long_sample_expansion.py |
+| SOLUSDT LONG stability | POSITIVE — only stable symbol | long_sample_expansion.py |
+| Entry timing (pullback to EMA20) | REJECTED — zero pullbacks in test winners | entry_timing_test.py |
+
+---
+
 ## WHAT HAS NOT BEEN TESTED (from original Section 13)
 
-1. BOS quality filter (highest impact, +0.504R ceiling, needs signal-time metric)
-2. Entry timing refinement (pullback to EMA after BOS — was rejected for shorts, untested for longs)
-3. LONG/MILD expansion (lower confidence threshold)
+1. ~~BOS quality filter~~ — DONE, helps SHORTs only (+0.467R at ≥0.60 floor)
+2. ~~Entry timing refinement~~ — DONE, rejected for LONGs (winners don't pull back)
+3. LONG/MILD expansion (lower confidence threshold) — partially mapped in Section 13
 4. Stop width optimization (rejected — tight stops outperform)
 5. European session focus (not re-tested after P0 fixes)
 6. Live paper trading deployment
+7. **Train/test stability investigation** — BTC train deeply negative
+8. **SOL deep-dive** — only stable symbol, different RSI zone
 
 ---
 
@@ -184,13 +198,12 @@ All 13 LONG test setups already in bullish HTF. Filter adds nothing.
 
 ---
 
-## NEXT SESSION PRIORITIES
+## NEXT SESSION PRIORITIES (revised 2026-04-26)
 
-1. **BOS quality filter for LONGs** — test if filtering weak BOS improves LONG edge
-2. **Expand LONG sample** — more symbols or longer history for LONG-only validation
-3. **Entry timing** — test pullback-to-EMA20 entry for LONGs (was rejected for shorts)
+1. **Train/test stability investigation** — why is BTC train -0.417R? Regime? Market structure?
+2. **SOL deep-dive** — only stable symbol (train +0.222R, test +0.351R). RSI zone 50-55.
+3. **BOS quality for SHORTs** — implement as live filter (proven +0.467R)
 4. **Live paper trading** — deploy signal output for real-time validation
-5. **Train/test stability** — understand why train period is deeply negative
 
 ---
 
@@ -198,9 +211,12 @@ All 13 LONG test setups already in bullish HTF. Filter adds nothing.
 
 - Do NOT aggregate multi-symbol results into headline metrics
 - Do NOT claim edge from 13 setups alone — need more data
-- Do NOT ignore train-period failure (-0.417R)
+- Do NOT ignore train-period failure (-0.417R for BTC)
 - Do NOT trade SHORTs without rebuilding direction logic from scratch
 - Do NOT use equity/leverage/position sizing in validation
 - Always use worst-case intracandle (SL-first)
 - Always use next-candle open for entry
 - Always use rolling/past-only thresholds
+- **NEW:** BOS quality does NOT help LONGs — don't apply it
+- **NEW:** Pullback-to-EMA20 does NOT help LONGs — momentum continuation is the edge
+- **NEW:** SOL is the only symbol with train/test stability
