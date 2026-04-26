@@ -26,6 +26,17 @@ Your ONLY job is maintaining the data pipeline.
 WHAT HAPPENED BEFORE THIS SESSION (2026-04-26)
 ============================================================
 
+0. THIS SESSION (2026-04-26 14:39 CST) — pipeline re-deployed:
+ - Cloned repo to /root/.openclaw/workspace/btc-intraday-system/
+ - Installed deps: pandas 3.0.2, numpy 2.4.4, requests (already present)
+ - Backfilled 629 hours (Mar 31 00:00 → Apr 26 04:00 UTC). 0 failed.
+ - Ran collector for 05:00 UTC hour → 630 total rows now.
+ - Installed 3 cron jobs (collector, health, snapshot) — all verified.
+ - Health check: all 7 checks pass (freshness warning expected).
+ - First snapshot created.
+ - cron daemon confirmed active.
+ - RESEARCH IS FROZEN. Only pipeline maintenance until ~2160 hours.
+
 1. FUNDING RATE RESEARCH — completed 3 tests (BEFORE FREEZE):
  - funding_event_study.py: funding extremes as discrete events. ~127 events.
    Behavioral finding: reversal ~50%. Not standalone signal.
@@ -67,20 +78,20 @@ WHAT HAPPENED BEFORE THIS SESSION (2026-04-26)
  - NO logic implemented. Ready to fill when research resumes.
 
 ============================================================
-CURRENT DATA STATUS (as of 2026-04-26 13:44 CST / 05:44 UTC)
+CURRENT DATA STATUS (as of 2026-04-26 14:39 CST / 06:39 UTC)
 ============================================================
 
 File: data/collected/btcusdt_hourly_derivatives.csv
-Rows: 629 (header + 629 data rows)
-Range: 2026-03-31 00:00 UTC → 2026-04-26 04:00 UTC
+Rows: 630 (header + 630 data rows)
+Range: 2026-03-31 00:00 UTC → 2026-04-26 05:00 UTC
 Gaps: 0
 Duplicates: 0
 NaN values: 0
 Coverage: 100%
 
 Target: ~2160 hours (3 months)
-Current fill: 629 / 2160 = 29.1%
-Remaining: ~1531 hours
+Current fill: 630 / 2160 = 29.2%
+Remaining: ~1530 hours
 ETA: ~64 days → June 29, 2026
 
 ============================================================
