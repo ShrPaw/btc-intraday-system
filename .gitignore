@@ -4,3 +4,7 @@ __pycache__/
 live_bot.log
 venv/
 setup_validation_output_v*.txt
+
+# Runtime data pipeline
+data/collected/
+data/snapshots/

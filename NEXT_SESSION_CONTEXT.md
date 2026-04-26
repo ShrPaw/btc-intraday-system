@@ -1,7 +1,7 @@
 NEXT SESSION CONTEXT — btc-intraday-system
 ===========================================
 Repo: https://github.com/ShrPaw/btc-intraday-system
-Read: PROJECT_CONTEXT.md, SESSION_CONTEXT.md, SESSION_CONTEXT_20260426_TESTS.md
+Read: PROJECT_CONTEXT.md, SESSION_CONTEXT.md
 
 ============================================================
 STATUS: DATA ACCUMULATION PHASE — RESEARCH FROZEN
@@ -23,7 +23,7 @@ Until then:
 Your ONLY job is maintaining the data pipeline.
 
 ============================================================
-WHAT HAPPENED TODAY (2026-04-26)
+WHAT HAPPENED BEFORE THIS SESSION (2026-04-26)
 ============================================================
 
 1. FUNDING RATE RESEARCH — completed 3 tests (BEFORE FREEZE):
@@ -45,7 +45,7 @@ WHAT HAPPENED TODAY (2026-04-26)
    (OHLCV, OI, taker buy/sell, LS ratio, funding)
  - Append-only CSV at data/collected/btcusdt_hourly_derivatives.csv
  - Cron job: btc-derivatives-collector runs at :05 every hour UTC
- - Backfilled 628 hours (Mar 31 → Apr 26). Zero gaps, zero NaN.
+ - Backfilled 628 hours (Mar 31 → Apr 26 03:00 UTC). Zero gaps, zero NaN.
  - Added validate_row() pre-append validation (hardened)
  - Added explicit gap logging on failures
 
@@ -67,23 +67,24 @@ WHAT HAPPENED TODAY (2026-04-26)
  - NO logic implemented. Ready to fill when research resumes.
 
 ============================================================
-CURRENT DATA STATUS
+CURRENT DATA STATUS (as of 2026-04-26 13:44 CST / 05:44 UTC)
 ============================================================
 
 File: data/collected/btcusdt_hourly_derivatives.csv
-Rows: 629
-Range: 2026-03-31 00:00 UTC → 2026-04-26 03:00 UTC
+Rows: 629 (header + 629 data rows)
+Range: 2026-03-31 00:00 UTC → 2026-04-26 04:00 UTC
 Gaps: 0
 Duplicates: 0
 NaN values: 0
 Coverage: 100%
 
 Target: ~2160 hours (3 months)
-Remaining: ~1532 hours
+Current fill: 629 / 2160 = 29.1%
+Remaining: ~1531 hours
 ETA: ~64 days → June 29, 2026
 
 ============================================================
-CRON JOBS (active)
+CRON JOBS (active — verified running 2026-04-26)
 ============================================================
 
 1. Collector: 5 * * * * (every hour at :05 UTC)
@@ -97,6 +98,38 @@ CRON JOBS (active)
 3. Snapshot: 55 23 * * * (daily at 23:55 UTC)
    Script: snapshot_data.py --clean
    Log: data/collected/snapshot_cron.log
+
+============================================================
+FIRST-TIME SETUP (if data/collected/ is empty or missing)
+============================================================
+
+This has been a recurring problem — the data pipeline gets set up
+in one session but doesn't persist. If you're reading this and
+data/collected/btcusdt_hourly_derivatives.csv doesn't exist:
+
+1. Install deps (system pip, venv is broken on this server):
+   pip3 install --break-system-packages pandas numpy requests
+
+2. Create directories:
+   mkdir -p data/collected data/snapshots
+
+3. Backfill historical data:
+   python3 collect_derivatives.py --backfill
+
+4. Install cron jobs:
+   crontab - << 'EOF'
+   5 * * * * cd /root/.openclaw/workspace/btc-intraday-system && /usr/bin/python3 collect_derivatives.py >> data/collected/cron.log 2>&1
+   0 6 * * * cd /root/.openclaw/workspace/btc-intraday-system && /usr/bin/python3 check_data_health.py --log >> data/collected/health_cron.log 2>&1
+   55 23 * * * cd /root/.openclaw/workspace/btc-intraday-system && /usr/bin/python3 snapshot_data.py --clean >> data/collected/snapshot_cron.log 2>&1
+   EOF
+
+5. Verify:
+   tail -3 data/collected/collector.log
+   wc -l data/collected/btcusdt_hourly_derivatives.csv
+   crontab -l
+
+6. Add to .gitignore (if not already):
+   echo -e "\ndata/collected/\ndata/snapshots/" >> .gitignore
 
 ============================================================
 KNOWN BUGS (from strict re-audit, NOT fixed today)
@@ -141,19 +174,9 @@ tail -3 data/collected/btcusdt_hourly_derivatives.csv
 # Check cron logs
 tail -20 data/collected/cron.log
 
-# Bot status (if redeployed)
-systemctl status btc-signal-bot
-
-============================================================
-KEY FILES (added/modified today)
-============================================================
-
-- collect_derivatives.py (hardened: validate_row, gap logging)
-- check_data_health.py (NEW: 7-point health check)
-- snapshot_data.py (NEW: daily backup + retention)
-- event_study_framework.py (NEW: skeleton for future research)
-- data/collected/btcusdt_hourly_derivatives.csv (628 hours backfilled)
-- data/snapshots/btcusdt_hourly_20260426.csv (first snapshot)
+# Verify cron is running
+crontab -l
+systemctl is-active cron
 
 ============================================================
 RESEARCH RESULTS (for reference, DO NOT re-run until data ready)
