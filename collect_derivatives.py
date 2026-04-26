@@ -264,6 +264,35 @@ COLUMNS = [
 ]
 
 
+def validate_row(row):
+    """
+    Validate a row before appending.
+    Returns (is_valid, error_message).
+    """
+    ts = row.get("timestamp", "")
+    if not ts or ts == "NaT":
+        return False, "Missing or invalid timestamp"
+
+    # Must have price data
+    if pd.isna(row.get("close")):
+        return False, f"{ts}: close price is NaN"
+
+    # Sanity: close must be positive
+    close = row.get("close", 0)
+    if close <= 0:
+        return False, f"{ts}: close={close} is non-positive"
+
+    # Timestamp must be aligned to exact hour
+    try:
+        dt = pd.Timestamp(ts)
+        if dt.minute != 0 or dt.second != 0:
+            return False, f"{ts}: not aligned to hour"
+    except Exception:
+        return False, f"{ts}: unparseable timestamp"
+
+    return True, ""
+
+
 def load_existing():
     """Load existing CSV, return set of timestamps already collected."""
     if os.path.exists(OUTPUT_FILE):
@@ -274,6 +303,12 @@ def load_existing():
 
 def append_row(row):
     """Append a single row to CSV. Create file with headers if needed."""
+    # Validate before writing
+    is_valid, error = validate_row(row)
+    if not is_valid:
+        log.error(f"VALIDATION FAILED — not appending: {error}")
+        return False
+
     file_exists = os.path.exists(OUTPUT_FILE)
     df = pd.DataFrame([row], columns=COLUMNS)
 
@@ -282,6 +317,7 @@ def append_row(row):
         log.info(f"Created {OUTPUT_FILE}")
     else:
         df.to_csv(OUTPUT_FILE, mode="a", header=False, index=False)
+    return True
 
 
 # =========================================================
@@ -311,10 +347,13 @@ def run_collection(target_hour=None):
 
     # Validate: at least price data must exist
     if pd.isna(row.get("close")):
-        log.error(f"No price data for {ts_str} — skipping")
+        log.error(f"No price data for {ts_str} — skipping (API failure)")
         return False
 
-    append_row(row)
+    if not append_row(row):
+        log.error(f"Validation failed for {ts_str} — row not saved")
+        return False
+
     log.info(f"Saved: {ts_str} | OI={row.get('open_interest', 'N/A')} | taker={row.get('taker_ratio', 'N/A')} | funding={row.get('funding_rate', 'N/A')}")
     return True
 
@@ -352,6 +391,7 @@ def backfill(start_date, end_date=None):
             collected += 1
         else:
             failed += 1
+            log.warning(f"GAP DETECTED: {ts_str} — collection failed, will retry on next backfill")
 
         current += timedelta(hours=1)
 
@@ -362,6 +402,8 @@ def backfill(start_date, end_date=None):
             log.info(f"Progress: {collected+failed+skipped}/{total_hours} ({collected} new, {skipped} existing, {failed} failed)")
 
     log.info(f"Backfill complete: {collected} collected, {skipped} existing, {failed} failed")
+    if failed > 0:
+        log.warning(f"WARNING: {failed} hours failed. Run backfill again to fill gaps.")
 
 
 def main():
